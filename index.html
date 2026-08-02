@@ -303,6 +303,19 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px}
 }
 @media(max-width:760px){
   #app{grid-template-columns:1fr}
+  table.tbl{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .filters-row .f{flex:1 1 46%;min-width:0}
+  .kpi .k-val{font-size:23px}
+  .topbar h2{font-size:15px}
+  .topbar .crumb{display:none}
+  .view-title{font-size:18px}
+  .report-doc{padding:22px 16px}
+  .charts-grid{gap:12px}
+  .chart-box{height:240px}
+  .heat td{min-width:44px;font-size:10.5px}
+  .land-ctas .btn{flex:1 1 100%}
+  .modal{padding:20px 16px}
+  .qr-card{justify-content:center;text-align:left}
   .sidebar{position:fixed;left:-270px;width:260px;transition:left .28s cubic-bezier(.2,.8,.2,1);box-shadow:var(--shadow-lg)}
   .sidebar.open{left:0}
   .menu-toggle{display:flex}
@@ -395,7 +408,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
   <footer class="land-foot">
     <div><b>UNIFRUTTI PERÚ</b> · Gestión Humana · Relaciones Laborales</div>
     <div>“Escuchamos a nuestros colaboradores para construir mejores equipos.”</div>
-    <div>Versión Enterprise 2026 · v1.0.0</div>
+    <div>Versión Enterprise 2026 · v1.1.0</div>
   </footer>
 </section>
 
@@ -434,7 +447,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
     </div>
     <div class="login-foot">
       <span><i class="dot-on"></i>Servidor en línea</span>
-      <span>SIGCL v1.0.0 · Enterprise 2026</span>
+      <span>SIGCL v1.1.0 · Enterprise 2026</span>
     </div>
   </div>
 </section>
@@ -875,9 +888,16 @@ function doLogin(){
     $('lgError').textContent='Usuario o contraseña incorrectos. Tras 5 intentos fallidos la cuenta se bloquea 15 minutos.';
     return;
   }
+  const acc = estadoAcceso(usr.user);
+  if(!acc.ok && !window._skipAcc){ mostrarBloqueo(acc, usr); return; }
   iniciarSesion(usr);
 }
-function loginAs(u){ iniciarSesion(USUARIOS.find(x=>x.user===u)); }
+function loginAs(u){
+  const usr = USUARIOS.find(x=>x.user===u);
+  const acc = estadoAcceso(usr.user);
+  if(!acc.ok && !window._skipAcc){ mostrarBloqueo(acc, usr); return; }
+  iniciarSesion(usr);
+}
 function iniciarSesion(usr){
   SESSION = usr;
   auditar('Inicio de sesión','Autenticación','Acceso correcto ('+usr.rol+')');
@@ -935,6 +955,7 @@ const NAV = [
   {sec:'Administración'},
   {id:'usuarios',  ico:'👤', txt:'Usuarios', roles:['Super Administrador','Administrador']},
   {id:'preguntas', ico:'🧩', txt:'Preguntas y Encuestas', roles:['Super Administrador','Administrador']},
+  {id:'accesos',   ico:'⏰', txt:'Control de Acceso', roles:['Super Administrador']},
   {id:'auditoria', ico:'🛡️', txt:'Bitácora / Auditoría', roles:['Super Administrador','Administrador']},
   {id:'config',    ico:'⚙️', txt:'Configuración', roles:['Super Administrador']},
   {id:'sysadmin',  ico:'👑', txt:'Administración del Sistema', roles:['__owner__']},
@@ -1041,6 +1062,7 @@ const TITULOS = {
   documentos:['Centro de Documentos','Biblioteca documental con versionado'],
   usuarios:['Usuarios','Gestión de cuentas, roles y permisos'],
   preguntas:['Preguntas y Encuestas','Editor de dimensiones, preguntas y escalas · sin programar'],
+  accesos:['Control de Acceso','Horarios de ingreso, feriados, solicitudes y permisos'],
   auditoria:['Bitácora de Auditoría','Trazabilidad completa del sistema'],
   config:['Configuración','Sectores, metas, semáforos y sistema'],
   sysadmin:['Administración del Sistema','Menú exclusivo del propietario · jtimoteo'],
@@ -1053,7 +1075,7 @@ function render(){
   const R = {dashboard:vDashboard, gerencia:vGerencia, supervisor:vSupervisor, encuesta:vEncuestaApp,
     campanias:vCampanias, qr:vQR, planes:vPlanes, seguimiento:vSeguimiento, calendario:vCalendario,
     ia:vIA, alertas:vAlertas, reportes:vReportes, documentos:vDocumentos, usuarios:vUsuarios,
-    preguntas:vPreguntas, auditoria:vAuditoria, config:vConfig, sysadmin:vSysadmin};
+    preguntas:vPreguntas, accesos:vAccesos, auditoria:vAuditoria, config:vConfig, sysadmin:vSysadmin};
   $('viewRoot').innerHTML='';
   (R[VIEW]||vDashboard)();
 }
@@ -1276,7 +1298,25 @@ let SURVEY = null;
 function nuevoSurvey(){
   return {paso:0, datos:{empresa:'',sector:'',area:'',tiempo:'',tipo:'',jefe:''}, resp:{}, abiertas:['','',''], inicio:Date.now()};
 }
-function startSurveyPublic(){ SURVEY=nuevoSurvey(); go('publicSurvey'); renderSurvey('surveyRoot', true); }
+function startSurveyPublic(){
+  const acc = estadoAcceso(null);
+  if(!acc.ok && !window._skipAcc){
+    go('publicSurvey');
+    $('surveyRoot').innerHTML = `
+    <div class="q-card" style="text-align:center;padding:46px 26px;max-width:520px;margin:8vh auto">
+      <div class="logo" style="justify-content:center;margin-bottom:18px"><div class="logo-mark" role="img" aria-label="Unifrutti"></div><div>SIGCL<small>UNIFRUTTI PERÚ</small></div></div>
+      <div style="font-size:54px;margin-bottom:8px">${acc.ico}</div>
+      <h3 style="font-size:19px;margin-bottom:8px">${acc.tipo}</h3>
+      <p style="color:var(--ink-2);max-width:400px;margin:0 auto 20px">${acc.msg}</p>
+      <div class="flex" style="justify-content:center;flex-wrap:wrap">
+        <button class="btn btn-o" onclick="go('landing')">← Volver</button>
+        ${!window.PROD? `<button class="btn btn-ghost btn-sm" onclick="window._skipAcc=true;startSurveyPublic()">Continuar (demostración)</button>`:''}
+      </div>
+    </div>`;
+    return;
+  }
+  SURVEY=nuevoSurvey(); go('publicSurvey'); renderSurvey('surveyRoot', true);
+}
 function vEncuestaApp(){
   $('viewRoot').innerHTML = `<div class="survey-shell" id="surveyRootApp"></div>`;
   if(!SURVEY || SURVEY.done) SURVEY=nuevoSurvey();
@@ -2329,6 +2369,225 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
 <script>
 /* =====================================================================
+   CONTROL DE ACCESO — horarios, feriados, solicitudes y permisos
+   · L-V 06:15–17:00 · Sáb 06:15–15:00 · Dom sin acceso
+   · Feriados del Perú editables (canje de fecha incluido)
+   · Fuera de horario/feriado → solicitud de acceso al Super Admin
+   · jtimoteo (propietario) siempre puede ingresar
+   ===================================================================== */
+const CONFIG_ACCESO = {
+  horario: { lv:{ini:'06:15',fin:'17:00'}, sab:{ini:'06:15',fin:'15:00'} },
+  feriados: [
+    {f:'2026-01-01', n:'Año Nuevo'},
+    {f:'2026-04-02', n:'Jueves Santo'},
+    {f:'2026-04-03', n:'Viernes Santo'},
+    {f:'2026-05-01', n:'Día del Trabajo'},
+    {f:'2026-06-07', n:'Batalla de Arica'},
+    {f:'2026-06-29', n:'San Pedro y San Pablo'},
+    {f:'2026-07-23', n:'Día de la Fuerza Aérea'},
+    {f:'2026-07-28', n:'Fiestas Patrias'},
+    {f:'2026-07-29', n:'Fiestas Patrias'},
+    {f:'2026-08-06', n:'Batalla de Junín'},
+    {f:'2026-08-30', n:'Santa Rosa de Lima'},
+    {f:'2026-10-08', n:'Combate de Angamos'},
+    {f:'2026-11-01', n:'Todos los Santos'},
+    {f:'2026-12-08', n:'Inmaculada Concepción'},
+    {f:'2026-12-09', n:'Batalla de Ayacucho'},
+    {f:'2026-12-25', n:'Navidad'},
+    {f:'2027-01-01', n:'Año Nuevo'},
+  ],
+  permisos: [],     // [{user, fecha, otorgadoPor}]
+  solicitudes: [],  // [{id, fecha, hora, user, nombre, motivo, tipo, estado}]
+};
+/* estado local persistente (el modo producción además sincroniza con la hoja Config) */
+(function cargarAccesoLocal(){
+  try{
+    const s = JSON.parse(localStorage.getItem('sigcl_acceso')||'null');
+    if(s){ ['horario','feriados','permisos','solicitudes'].forEach(k=>{ if(s[k]) CONFIG_ACCESO[k]=s[k]; }); }
+  }catch(e){}
+})();
+function guardarAcceso(){
+  try{ localStorage.setItem('sigcl_acceso', JSON.stringify(CONFIG_ACCESO)); }catch(e){}
+  if(window.PROD && typeof apiConfigPush==='function') apiConfigPush();
+}
+function aplicarConfigRemota(str){
+  try{
+    const c = (typeof str==='string')? JSON.parse(str) : str;
+    if(!c) return;
+    ['horario','feriados','permisos','solicitudes'].forEach(k=>{ if(c[k]) CONFIG_ACCESO[k]=c[k]; });
+    try{ localStorage.setItem('sigcl_acceso', JSON.stringify(CONFIG_ACCESO)); }catch(e){}
+  }catch(e){}
+}
+const fechaHoy = now => { const d=now||new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+
+function estadoAcceso(user, now){
+  now = now || new Date();
+  if(user==='jtimoteo') return {ok:true, exento:true};
+  const hoy = fechaHoy(now);
+  if(user && CONFIG_ACCESO.permisos.some(p=>p.user===user && p.fecha===hoy))
+    return {ok:true, permiso:true};
+  const fer = CONFIG_ACCESO.feriados.find(x=>x.f===hoy);
+  if(fer) return {ok:false, tipo:'Feriado', ico:'🎉', msg:`Hoy es feriado — ${fer.n}. El sistema no está disponible. ¡Lo esperamos al retorno de labores!`};
+  const dow = now.getDay(); // 0=domingo, 6=sábado
+  if(dow===0) return {ok:false, tipo:'Domingo', ico:'🌙', msg:'Los domingos el sistema no está disponible. Lo esperamos mañana desde las '+CONFIG_ACCESO.horario.lv.ini+' a. m.'};
+  const h = dow===6 ? CONFIG_ACCESO.horario.sab : CONFIG_ACCESO.horario.lv;
+  const min = now.getHours()*60 + now.getMinutes();
+  const a = h.ini.split(':'), b = h.fin.split(':');
+  const ini = +a[0]*60 + +a[1], fin = +b[0]*60 + +b[1];
+  if(min < ini || min > fin){
+    const rango = (dow===6? 'sábados ' : 'lunes a viernes ') + h.ini + ' – ' + h.fin;
+    return {ok:false, tipo:'Fuera de horario', ico:'⏰', msg:`Está fuera del horario permitido (${rango}). ¡Lo esperamos mañana!`};
+  }
+  return {ok:true};
+}
+
+/* ---------- pantalla de bloqueo (login) ---------- */
+function mostrarBloqueo(acc, usr){
+  const enDemo = !window.PROD;
+  modal(`<div style="text-align:center">
+    <div style="font-size:52px;margin-bottom:6px">${acc.ico}</div>
+    <h3 style="margin-bottom:8px">${acc.tipo}</h3>
+    <p class="muted" style="max-width:400px;margin:0 auto 18px">${acc.msg}</p>
+    <div style="text-align:left;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:14px 16px">
+      <b style="font-size:13px">📩 ¿Necesita ingresar de todas formas?</b>
+      <p class="small muted" style="margin:4px 0 10px">Envíe una solicitud al Coordinador de Relaciones Laborales. Si la aprueba, tendrá acceso por el día de hoy.</p>
+      <label>Usuario</label><input id="saUser" value="${usr? usr.user:''}" placeholder="su usuario">
+      <label style="margin-top:8px">Motivo</label><textarea id="saMotivo" rows="2" placeholder="Ej.: Necesito descargar el reporte para el comité de mañana."></textarea>
+      <div class="flex mt8" style="justify-content:flex-end">
+        <button class="btn btn-p btn-sm" onclick="enviarSolicitudAcceso()">Enviar solicitud</button>
+      </div>
+    </div>
+    <div class="flex mt16" style="justify-content:center">
+      ${enDemo? `<button class="btn btn-o btn-sm" onclick="closeModal();window._skipAcc=true;${usr?`iniciarSesion(USUARIOS.find(u=>u.user==='${usr.user}'))`:''}">Continuar (solo demostración)</button>`:''}
+      <button class="btn btn-ghost btn-sm" onclick="closeModal()">Cerrar</button>
+    </div>
+  </div>`);
+  auditar('Acceso bloqueado','Control de Acceso', (usr? usr.user+' · ':'')+acc.tipo);
+}
+function enviarSolicitudAcceso(){
+  const user = ($('saUser').value||'').trim().toLowerCase();
+  const motivo = ($('saMotivo').value||'').trim();
+  if(!user) return toast('⚠️ Indique su usuario.','warn');
+  if(motivo.length<5) return toast('⚠️ Describa brevemente el motivo.','warn');
+  const u = USUARIOS.find(x=>x.user===user);
+  CONFIG_ACCESO.solicitudes.unshift({
+    id: 'SA-'+Date.now().toString(36).toUpperCase(),
+    fecha: fechaHoy(), hora: new Date().toTimeString().slice(0,5),
+    user, nombre: u? u.nombre : user, motivo,
+    tipo: estadoAcceso(user).tipo || 'Fuera de horario', estado:'Pendiente',
+  });
+  guardarAcceso();
+  closeModal();
+  toast('📩 Solicitud enviada al Coordinador de Relaciones Laborales. Recibirá acceso si es aprobada.','ok');
+}
+
+/* ---------- MÓDULO: Control de Acceso (Super Admin) ---------- */
+function vAccesos(){
+  const hoy = fechaHoy();
+  const pend = CONFIG_ACCESO.solicitudes.filter(s=>s.estado==='Pendiente');
+  $('viewRoot').innerHTML = `
+  <h3 class="view-title">Control de Acceso</h3>
+  <div class="view-sub">Horarios de ingreso, feriados (con canje), solicitudes y permisos temporales · solo Super Administrador</div>
+  <div class="charts-grid">
+
+    <div class="card span6"><div class="card-h">⏰ Horario de ingreso</div>
+      <div class="card-sub">Fuera de estos rangos nadie ingresa (excepto el propietario y quien tenga permiso del día)</div>
+      <table class="tbl">
+        <tr><td class="b">Lunes a viernes</td>
+          <td><div class="flex"><input type="time" id="hLvIni" value="${CONFIG_ACCESO.horario.lv.ini}" style="max-width:120px"> – <input type="time" id="hLvFin" value="${CONFIG_ACCESO.horario.lv.fin}" style="max-width:120px"></div></td></tr>
+        <tr><td class="b">Sábados</td>
+          <td><div class="flex"><input type="time" id="hSabIni" value="${CONFIG_ACCESO.horario.sab.ini}" style="max-width:120px"> – <input type="time" id="hSabFin" value="${CONFIG_ACCESO.horario.sab.fin}" style="max-width:120px"></div></td></tr>
+        <tr><td class="b">Domingos</td><td><span class="chip chip-cri">⛔ Sin acceso</span></td></tr>
+      </table>
+      <button class="btn btn-p btn-sm mt16" onclick="guardarHorario()">💾 Guardar horario</button>
+      <div class="small muted mt8">Estado ahora mismo: ${(()=>{const a=estadoAcceso('_test_');return a.ok? '<span class="chip chip-exc">● Sistema abierto</span>' : `<span class="chip chip-cri">⛔ Cerrado · ${a.tipo}</span>`})()}</div>
+    </div>
+
+    <div class="card span6"><div class="card-h">📩 Solicitudes de acceso ${pend.length? `<span class="chip chip-cri">${pend.length} pendiente(s)</span>`:''}</div>
+      <div class="card-sub">Aprobar otorga acceso solo por el día de hoy</div>
+      ${CONFIG_ACCESO.solicitudes.length? `<table class="tbl">
+        ${CONFIG_ACCESO.solicitudes.slice(0,10).map(s=>`<tr>
+          <td><b>${s.user}</b><div class="small muted">${s.fecha} ${s.hora} · ${s.tipo}</div><div class="small">${s.motivo}</div></td>
+          <td style="white-space:nowrap;text-align:right">
+            ${s.estado==='Pendiente'? `<button class="btn btn-p btn-sm" onclick="resolverSolicitud('${s.id}',true)">✓ Aprobar</button>
+            <button class="btn btn-o btn-sm" onclick="resolverSolicitud('${s.id}',false)">✕</button>`
+            : (s.estado==='Aprobada'? '<span class="chip chip-exc">✓ Aprobada</span>':'<span class="chip chip-cri">✕ Rechazada</span>')}
+          </td></tr>`).join('')}
+      </table>` : '<p class="muted small mt8">No hay solicitudes registradas.</p>'}
+    </div>
+
+    <div class="card span6"><div class="card-h">🎉 Feriados del año</div>
+      <div class="card-sub">La empresa puede canjear un feriado: use ✏️ para moverlo a otra fecha</div>
+      <table class="tbl">
+        ${CONFIG_ACCESO.feriados.map((x,i)=>`<tr ${x.f===hoy?'style="background:var(--st-cri-bg)"':''}>
+          <td class="num b">${x.f}</td><td>${x.n}${x.canje? ' <span class="chip chip-bue">↔ canjeado</span>':''}</td>
+          <td style="white-space:nowrap;text-align:right">
+            <button class="btn btn-ghost btn-sm" title="Canjear fecha" onclick="canjearFeriado(${i})">✏️</button>
+            <button class="btn btn-ghost btn-sm" title="Eliminar" onclick="CONFIG_ACCESO.feriados.splice(${i},1);guardarAcceso();auditar('Eliminó feriado','Control de Acceso','${x.f}');render()">🗑️</button>
+          </td></tr>`).join('')}
+      </table>
+      <div class="flex mt16 wrap">
+        <input type="date" id="ferF" style="max-width:160px"><input id="ferN" placeholder="Nombre del feriado" style="max-width:220px">
+        <button class="btn btn-o btn-sm" onclick="agregarFeriado()">＋ Agregar</button>
+      </div>
+    </div>
+
+    <div class="card span6"><div class="card-h">🔑 Permisos temporales activos</div>
+      <div class="card-sub">Acceso excepcional otorgado por día</div>
+      ${CONFIG_ACCESO.permisos.length? `<table class="tbl">
+        ${CONFIG_ACCESO.permisos.map((p,i)=>`<tr><td class="b">${p.user}</td><td class="num">${p.fecha}</td><td class="small muted">por ${p.otorgadoPor||'—'}</td>
+        <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="CONFIG_ACCESO.permisos.splice(${i},1);guardarAcceso();render()">🗑️</button></td></tr>`).join('')}
+      </table>` : '<p class="muted small mt8">Sin permisos activos.</p>'}
+      <div class="flex mt16 wrap">
+        <select id="pmUser" style="max-width:180px">${USUARIOS.filter(u=>u.user!=='jtimoteo').map(u=>`<option>${u.user}</option>`).join('')}</select>
+        <input type="date" id="pmFecha" value="${hoy}" style="max-width:160px">
+        <button class="btn btn-o btn-sm" onclick="otorgarPermiso()">＋ Otorgar</button>
+      </div>
+    </div>
+  </div>`;
+}
+function guardarHorario(){
+  CONFIG_ACCESO.horario.lv  = {ini:$('hLvIni').value||'06:15', fin:$('hLvFin').value||'17:00'};
+  CONFIG_ACCESO.horario.sab = {ini:$('hSabIni').value||'06:15', fin:$('hSabFin').value||'15:00'};
+  guardarAcceso();
+  auditar('Modificó horario de ingreso','Control de Acceso', `L-V ${CONFIG_ACCESO.horario.lv.ini}-${CONFIG_ACCESO.horario.lv.fin} · Sáb ${CONFIG_ACCESO.horario.sab.ini}-${CONFIG_ACCESO.horario.sab.fin}`);
+  render(); toast('✅ Horario actualizado.','ok');
+}
+function agregarFeriado(){
+  const f=$('ferF').value, n=($('ferN').value||'').trim();
+  if(!f||!n) return toast('⚠️ Indique fecha y nombre del feriado.','warn');
+  CONFIG_ACCESO.feriados.push({f,n});
+  CONFIG_ACCESO.feriados.sort((a,b)=>a.f<b.f?-1:1);
+  guardarAcceso(); auditar('Agregó feriado','Control de Acceso',`${f} · ${n}`);
+  render(); toast('✅ Feriado agregado.','ok');
+}
+function canjearFeriado(i){
+  const x = CONFIG_ACCESO.feriados[i];
+  modal(`<h3>↔ Canjear feriado</h3>
+  <p class="muted small" style="margin:8px 0 12px">«${x.n}» está programado el <b>${x.f}</b>. Al canjearlo, ese día el sistema funcionará con normalidad y el bloqueo se moverá a la nueva fecha.</p>
+  <label>Nueva fecha</label><input type="date" id="cjF" value="${x.f}">
+  <div class="flex mt16" style="justify-content:flex-end">
+    <button class="btn btn-o" onclick="closeModal()">Cancelar</button>
+    <button class="btn btn-p" onclick="(function(){const nf=$('cjF').value; if(!nf)return; auditar('Canjeó feriado','Control de Acceso','${x.n}: ${x.f} → '+nf); CONFIG_ACCESO.feriados[${i}]={f:nf,n:'${x.n}',canje:true}; CONFIG_ACCESO.feriados.sort((a,b)=>a.f<b.f?-1:1); guardarAcceso(); closeModal(); render(); toast('✅ Feriado canjeado a '+nf,'ok');})()">Canjear</button>
+  </div>`);
+}
+function resolverSolicitud(id, aprobar){
+  const s = CONFIG_ACCESO.solicitudes.find(x=>x.id===id); if(!s) return;
+  s.estado = aprobar? 'Aprobada':'Rechazada';
+  if(aprobar) CONFIG_ACCESO.permisos.push({user:s.user, fecha:fechaHoy(), otorgadoPor:SESSION? SESSION.user:'jtimoteo'});
+  guardarAcceso();
+  auditar(aprobar?'Aprobó solicitud de acceso':'Rechazó solicitud de acceso','Control de Acceso', s.user+' · '+s.motivo.slice(0,50));
+  render(); toast(aprobar? `✅ ${s.user} tiene acceso por hoy.` : 'Solicitud rechazada.','ok');
+}
+function otorgarPermiso(){
+  CONFIG_ACCESO.permisos.push({user:$('pmUser').value, fecha:$('pmFecha').value, otorgadoPor:SESSION? SESSION.user:'jtimoteo'});
+  guardarAcceso(); auditar('Otorgó permiso temporal','Control de Acceso',$('pmUser').value+' · '+$('pmFecha').value);
+  render(); toast('✅ Permiso otorgado.','ok');
+}
+</script>
+
+<script>
+/* =====================================================================
    MODO PRODUCCIÓN — dos puentes posibles (arquitectura Sistema RL):
    · fetch  → página servida desde GitHub Pages; API = Apps Script /exec
               (la URL se define en config.js → window.SIGCL_API)
@@ -2348,6 +2607,8 @@ function initProd(){
   else return; // demo local
 
   window.PROD = true;
+  /* producción limpia: sin accesos rápidos de demostración en el login */
+  document.querySelectorAll('.demo-roles').forEach(function(n){ n.classList.add('hidden'); });
   const params = new URLSearchParams(location.search);
   const boot = window.BOOT || { modo: params.get('e') ? 'encuesta' : 'app', demo: !!params.get('demo'), url: '' };
   window.APP_URL = (API_MODE==='fetch') ? (location.origin + location.pathname) : (boot.url || '');
@@ -2360,6 +2621,7 @@ function initProd(){
   apiObtener(function(r){
     try{
       if(API_MODE==='gas' && r && r.url) window.APP_URL = r.url;
+      if(r && r.config) aplicarConfigRemota(r.config); // horarios, feriados, permisos y solicitudes compartidos
       if(!modoDemo && r && Array.isArray(r.filas)){
         DB.encuestas.length = 0;
         r.filas.forEach(function(f,i){ const reg = prodParseFila(f,i); if(reg) DB.encuestas.push(reg); });
@@ -2393,6 +2655,12 @@ function apiGuardar(payloadJson, ok, err){
     fetch(SIGCL_API_URL, {method:'POST', body: payloadJson})
       .then(function(r){ return r.json(); }).then(ok).catch(err);
   }
+}
+
+/* sube la configuración de acceso (horario/feriados/permisos/solicitudes) a la hoja Config */
+function apiConfigPush(){
+  const body = JSON.stringify({tipo:'config', config: JSON.stringify(CONFIG_ACCESO)});
+  apiGuardar(body, function(){}, function(){ /* reintento en el próximo guardado */ });
 }
 
 function prodParseFila(f,i){
