@@ -1,0 +1,1 @@
+window.SIGCL_API = '';
