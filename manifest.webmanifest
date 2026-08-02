@@ -1,0 +1,17 @@
+{
+  "name": "SIGCL · Sistema Inteligente de Clima Laboral",
+  "short_name": "SIGCL",
+  "description": "Sistema Inteligente de Clima Laboral · UNIFRUTTI PERÚ · Gestión Humana",
+  "lang": "es-PE",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#070c16",
+  "theme_color": "#0a2463",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
