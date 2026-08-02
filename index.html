@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="es" data-theme="light">
+<html lang="es" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SIGCL · Sistema Inteligente de Clima Laboral · UNIFRUTTI PERÚ</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ===================== SIGCL · DESIGN SYSTEM ===================== */
 :root{
@@ -26,19 +26,19 @@
   --st-exc-bg:#e8f7e8; --st-mb-bg:#eef6e7; --st-bue-bg:#fdf3dc; --st-reg-bg:#fdeadd; --st-cri-bg:#fbe5e5;
   --grid:#e7ebf2; --radius:16px; --radius-sm:10px;
   --font:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
-  --font-display:'Poppins','Inter',system-ui,sans-serif;
+  --font-display:'Sora','Poppins','Inter',system-ui,sans-serif;
 }
 [data-theme="dark"]{
-  --page:#0d1117; --surface:#161b26; --surface-2:#1b2130; --glass:rgba(22,27,38,.72);
-  --ink:#f0f4fa; --ink-2:#b7c1d1; --ink-3:#7b8698;
-  --line:#252d3d; --line-2:#303a4e;
+  --page:#070c16; --surface:#0d1524; --surface-2:#121c30; --glass:rgba(10,17,32,.72);
+  --ink:#eef4ff; --ink-2:#9fb2cc; --ink-3:#68799a;
+  --line:#1c2740; --line-2:#263452;
   --shadow-sm:0 1px 2px rgba(0,0,0,.4);
   --shadow:0 4px 18px -2px rgba(0,0,0,.5);
   --shadow-lg:0 14px 44px -8px rgba(0,0,0,.6);
   --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300;
   --st-exc:#18b818; --st-mb:#7cbf52; --st-bue:#d9a012; --st-reg:#e0703a; --st-cri:#e05555;
   --st-exc-bg:#10240f; --st-mb-bg:#16240f; --st-bue-bg:#2a2208; --st-reg-bg:#2b1a0d; --st-cri-bg:#2b1111;
-  --grid:#232b3a;
+  --grid:#16213a;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
@@ -377,6 +377,99 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px}
 /* tablas: fila cebra sutil */
 .tbl tbody tr:nth-child(even){background:color-mix(in srgb, var(--surface-2) 55%, transparent)}
 .tbl tbody tr:hover{background:rgba(42,120,214,.07)}
+
+/* ===================== MODELO B · AURORA NOCTURNA ===================== */
+/* — LANDING: héroe centrado con auroras y rejilla — */
+[data-theme="dark"] #landing{background:#070c16}
+[data-theme="dark"] #landing::before{background-image:linear-gradient(#ffffff09 1px,transparent 1px),linear-gradient(90deg,#ffffff09 1px,transparent 1px);background-size:44px 44px;opacity:1;
+  -webkit-mask-image:radial-gradient(75% 62% at 50% 38%,#000,transparent);mask-image:radial-gradient(75% 62% at 50% 38%,#000,transparent)}
+[data-theme="dark"] .orb1{background:#1d5fd680;filter:blur(95px);opacity:.9}
+[data-theme="dark"] .orb2{background:#e11d2e50;filter:blur(95px);opacity:.9}
+[data-theme="dark"] .orb3{background:#2a78d666;filter:blur(85px)}
+.land-hero{grid-template-columns:1fr;text-align:center;max-width:940px;gap:0;padding-bottom:26px}
+.glass-stack{display:none}
+.land-sub{margin-left:auto;margin-right:auto}
+.land-ctas,.land-stats{justify-content:center}
+.land-kicker{border:1px solid rgba(90,162,255,.4);background:rgba(42,120,214,.12);color:#8db9f2;border-left:3px solid var(--red-400)}
+[data-theme="dark"] .land-title{font-size:clamp(34px,4.8vw,58px)}
+[data-theme="dark"] .land-title span{background:linear-gradient(90deg,#5aa2ff,#8db9f2 40%,#ff5a67 90%);-webkit-background-clip:text;background-clip:text;color:transparent}
+.land-stat{background:var(--glass);border:1px solid var(--line);border-radius:16px;padding:14px 24px;min-width:140px;text-align:center;backdrop-filter:blur(8px)}
+[data-theme="dark"] .land-stat b{background:linear-gradient(90deg,#5aa2ff,#ff5a67);-webkit-background-clip:text;background-clip:text;color:transparent}
+.btn-red{background:linear-gradient(90deg,#e11d2e,#ff5a67);color:#fff;box-shadow:0 10px 28px -8px rgba(225,29,46,.55);font-weight:800}
+.btn-red:hover{transform:translateY(-1px);box-shadow:0 14px 34px -8px rgba(225,29,46,.6)}
+[data-theme="dark"] .dim-card{background:rgba(13,21,36,.8)}
+[data-theme="dark"] .dim-card:hover{border-color:#2a78d666;box-shadow:0 18px 44px -18px #1d5fd680}
+
+/* — LOGIN: dividido en panel de marca + formulario — */
+#login{display:grid;grid-template-columns:1.05fr .95fr;align-items:stretch;padding:0;background:#070c16}
+.login-brand{position:relative;overflow:hidden;padding:clamp(30px,6vw,60px);display:flex;flex-direction:column;justify-content:space-between;
+  background:radial-gradient(640px 420px at 18% 28%,#1d5fd63d,transparent 60%),radial-gradient(430px 320px at 82% 92%,#e11d2e2e,transparent 60%),#070c16}
+.login-brand .ring{position:absolute;right:-90px;top:50%;transform:translateY(-50%);width:320px;height:320px;border-radius:50%;border:2px dashed #2a78d655;animation:spinB 34s linear infinite}
+@keyframes spinB{to{transform:translateY(-50%) rotate(360deg)}}
+.login-brand h2{font-family:var(--font-display);font-size:clamp(22px,2.6vw,31px);line-height:1.22;color:#eef4ff;max-width:380px;position:relative;z-index:2}
+.login-brand h2 em{font-style:normal;color:#ff5a67}
+.login-brand p{color:#9fb2cc;font-size:13px;margin-top:12px;max-width:360px;position:relative;z-index:2}
+.login-brand .lb-foot{font-size:11px;color:#54627d;position:relative;z-index:2}
+.login-side{background:#0a1120;border-left:1px solid #ffffff10;display:flex;align-items:center;justify-content:center;padding:clamp(24px,4vw,50px);position:relative}
+.login-card{width:100%;max-width:400px;background:transparent;backdrop-filter:none;border:none;border-radius:0;padding:0;box-shadow:none;color:#eef4ff;animation:popIn .5s cubic-bezier(.2,.9,.3,1.1)}
+.login-card::before{display:none}
+.login-card h1{text-align:left;font-size:22px}
+.login-card .slogan{text-align:left;margin:6px 0 22px;color:#68799a}
+.login-card .logo-mark{margin:0 0 16px}
+.login-card label{color:#9fb2cc}
+.login-card input{background:#0d1524;border:1.5px solid #24334d;color:#eef4ff;border-radius:12px}
+.login-card input::placeholder{color:#54627d}
+.login-card input:focus{border-color:#5aa2ff;box-shadow:0 0 0 3px rgba(42,120,214,.25)}
+.login-meta{color:#9fb2cc}
+.login-meta a{color:#5aa2ff}
+.login-card .btn-p{background:linear-gradient(90deg,#2a78d6,#5aa2ff);font-weight:800;box-shadow:0 10px 26px -8px rgba(42,120,214,.55)}
+.demo-roles{border-top:1px solid #ffffff14}
+.demo-roles p{color:#54627d}
+.role-pill{background:#0d1524;border:1px solid #24334d}
+.role-pill:hover{background:#16233c;border-color:#5aa2ff}
+.login-foot{color:#54627d}
+@media(max-width:900px){#login{grid-template-columns:1fr}.login-brand{min-height:280px}.login-brand .ring{display:none}}
+
+/* — ESFERAS FRUTALES (productos Unifrutti: uva, palta, arándanos, limón) — */
+.fruit{position:absolute;z-index:4;display:flex;align-items:center;justify-content:center;border-radius:50%;
+  background:rgba(13,21,36,.72);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(8px);
+  animation:floaty 7s ease-in-out infinite;pointer-events:none}
+.fruit::after{content:"";position:absolute;inset:-2px;border-radius:50%;padding:2px;
+  background:linear-gradient(135deg,var(--fg1),transparent 60%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+.fruit{box-shadow:0 18px 44px -14px var(--fg2)}
+.f-uva{--fg1:#a78bfa;--fg2:#7c3aed99;width:86px;height:86px;font-size:40px;top:16%;left:7%;animation-delay:.4s}
+.f-palta{--fg1:#4ade80;--fg2:#16a34a99;width:72px;height:72px;font-size:34px;top:56%;left:13%;animation-delay:1.6s}
+.f-aran{--fg1:#5aa2ff;--fg2:#2a78d699;width:78px;height:78px;font-size:36px;top:20%;right:8%;animation-delay:2.4s}
+.f-limon{--fg1:#fde047;--fg2:#ca8a0499;width:66px;height:66px;font-size:30px;top:58%;right:13%;animation-delay:3.2s}
+.fruit-badges{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:26px;position:relative;z-index:5}
+.fruit-badge{display:flex;gap:8px;align-items:center;background:rgba(13,21,36,.72);border:1px solid rgba(255,255,255,.14);
+  border-radius:99px;padding:8px 16px;font-size:12.5px;font-weight:700;color:var(--ink-2);backdrop-filter:blur(6px)}
+.fruit-badge i{font-style:normal;font-size:16px}
+[data-theme="light"] .fruit, :root:not([data-theme="dark"]) .fruit{background:rgba(255,255,255,.8);border-color:#e3ebf7}
+[data-theme="light"] .fruit-badge{background:#fff;border-color:#e3ebf7}
+.login-brand .fruit{position:absolute;animation-duration:9s}
+.lb-uva{--fg1:#a78bfa;--fg2:#7c3aed99;width:62px;height:62px;font-size:28px;top:14%;right:14%}
+.lb-palta{--fg1:#4ade80;--fg2:#16a34a99;width:54px;height:54px;font-size:24px;bottom:24%;right:26%;animation-delay:1.4s}
+.lb-aran{--fg1:#5aa2ff;--fg2:#2a78d699;width:58px;height:58px;font-size:26px;top:44%;right:6%;animation-delay:2.6s}
+.lb-limon{--fg1:#fde047;--fg2:#ca8a0499;width:50px;height:50px;font-size:22px;bottom:8%;right:10%;animation-delay:3.4s}
+@media(max-width:1060px){.f-uva,.f-palta{display:none}.f-aran{top:8%;right:5%}.f-limon{top:auto;bottom:4%;right:8%}}
+
+/* — APP: superficie aurora — */
+[data-theme="dark"] .sidebar{background:#0a1120}
+[data-theme="dark"] .topbar{background:rgba(7,12,22,.78)}
+[data-theme="dark"] .nav-item.active{background:linear-gradient(90deg,rgba(42,120,214,.20),rgba(42,120,214,.05));color:#8db9f2}
+[data-theme="dark"] .kpi .k-val{background:linear-gradient(90deg,#5aa2ff,#ff5a67);-webkit-background-clip:text;background-clip:text;color:transparent}
+[data-theme="dark"] .kpi::after{background:radial-gradient(circle,rgba(90,162,255,.14),transparent 70%)}
+[data-theme="dark"] .btn-p{background:linear-gradient(90deg,#2a78d6,#5aa2ff);box-shadow:0 8px 22px -8px rgba(42,120,214,.55)}
+[data-theme="dark"] .view-title::after{background:linear-gradient(90deg,#ff5a67,#5aa2ff)}
+[data-theme="dark"] .progress-inner{background:linear-gradient(90deg,#ff5a67,#5aa2ff)}
+[data-theme="dark"] .avatar{background:linear-gradient(135deg,#5aa2ff,#123a6e)}
+[data-theme="dark"] .dim-header{background:linear-gradient(120deg,rgba(42,120,214,.20),rgba(225,29,46,.08) 70%,transparent);border-left-color:#5aa2ff}
+[data-theme="dark"] .likert button.sel{border-color:#5aa2ff;background:rgba(42,120,214,.16);color:#8db9f2;box-shadow:0 0 0 3px rgba(42,120,214,.22)}
+[data-theme="dark"] .qr-box{background:#fff}
+[data-theme="dark"] .report-doc{background:#0d1524}
+
 </style>
 <script>/* Chart.js v4.4.4 (MIT) */
 /*!
@@ -416,6 +509,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
 <!-- ==================== LANDING ==================== -->
 <section id="landing">
   <div class="land-orb orb1"></div><div class="land-orb orb2"></div><div class="land-orb orb3"></div>
+  <div class="fruit f-uva">🍇</div><div class="fruit f-palta">🥑</div><div class="fruit f-aran">🫐</div><div class="fruit f-limon">🍋</div>
   <nav class="land-nav">
     <div class="logo"><div class="logo-mark" role="img" aria-label="Unifrutti"></div><div>SIGCL<small>UNIFRUTTI PERÚ</small></div></div>
     <div class="flex">
@@ -430,7 +524,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
       <p class="land-sub">Conociendo la percepción de nuestros colaboradores para construir organizaciones más humanas, transparentes y eficientes.</p>
       <div class="land-ctas">
         <button class="btn btn-p" onclick="go('login')">🔐 Ingresar al Sistema</button>
-        <button class="btn btn-o" onclick="startSurveyPublic()">📝 Responder Encuesta</button>
+        <button class="btn btn-red" onclick="startSurveyPublic()">📝 Responder Encuesta</button>
         <button class="btn btn-o" onclick="go('login')">📊 Conocer Indicadores</button>
       </div>
       <div class="land-stats">
@@ -438,6 +532,13 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
         <div class="land-stat"><b id="ls-sec">11</b><span>Sectores</span></div>
         <div class="land-stat"><b id="ls-camp">3</b><span>Campañas</span></div>
         <div class="land-stat"><b id="ls-clima">—</b><span>Clima General</span></div>
+      </div>
+      <div class="fruit-badges">
+        <div class="fruit-badge"><i>🍇</i> Uva</div>
+        <div class="fruit-badge"><i>🥑</i> Palta</div>
+        <div class="fruit-badge"><i>🫐</i> Arándanos</div>
+        <div class="fruit-badge"><i>🍋</i> Limón</div>
+        <div class="fruit-badge" style="color:#ff8b95"><i>❤️</i> Nuestra gente</div>
       </div>
     </div>
     <div class="glass-stack">
@@ -465,17 +566,27 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
   <footer class="land-foot">
     <div><b>UNIFRUTTI PERÚ</b> · Gestión Humana · Relaciones Laborales</div>
     <div>“Escuchamos a nuestros colaboradores para construir mejores equipos.”</div>
-    <div>Versión Enterprise 2026 · v1.1.0</div>
+    <div>Versión Enterprise 2026 · v1.6.0</div>
   </footer>
 </section>
 
-<!-- ==================== LOGIN ==================== -->
+<!-- ==================== LOGIN (Aurora · panel de marca + formulario) ==================== -->
 <section id="login" class="hidden">
-  <canvas id="loginField" class="login-field"></canvas>
+  <div class="login-brand">
+    <div class="ring"></div>
+    <div class="fruit lb-uva">🍇</div><div class="fruit lb-palta">🥑</div><div class="fruit lb-aran">🫐</div><div class="fruit lb-limon">🍋</div>
+    <div class="logo"><div class="logo-mark" role="img" aria-label="Unifrutti"></div><div>SIGCL<small>UNIFRUTTI PERÚ</small></div></div>
+    <div>
+      <h2>Escuchamos a nuestros colaboradores para construir <em>mejores equipos</em>.</h2>
+      <p>Acceso exclusivo para Gestión Humana, Supervisores GH y Gerencia. Los colaboradores responden directamente desde el código QR, sin usuario.</p>
+    </div>
+    <div class="lb-foot"><i class="dot-on"></i>Todos los sistemas operativos · SIGCL Enterprise 2026</div>
+  </div>
+  <div class="login-side">
   <div class="login-card">
     <div class="logo-mark" role="img" aria-label="Unifrutti"></div>
-    <h1>Sistema Inteligente de Clima Laboral</h1>
-    <p class="slogan">“Escuchamos a nuestros colaboradores para construir mejores equipos.”</p>
+    <h1>Bienvenido de nuevo 👋</h1>
+    <p class="slogan">Ingrese sus credenciales corporativas del Sistema Inteligente de Clima Laboral.</p>
     <div>
       <label>Usuario</label>
       <input id="lgUser" placeholder="jtimoteo" autocomplete="username">
@@ -504,8 +615,9 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
     </div>
     <div class="login-foot">
       <span><i class="dot-on"></i>Servidor en línea</span>
-      <span>SIGCL v1.1.0 · Enterprise 2026</span>
+      <span>SIGCL v1.6.0 · Enterprise 2026</span>
     </div>
+  </div>
   </div>
 </section>
 
