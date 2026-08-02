@@ -785,7 +785,11 @@ function indiceOrganizacional(camp){
 
 /* alertas inteligentes */
 function alertasInteligentes(){
-  const out=[]; const prev = campAnterior(FILT.campania);
+  const out=[];
+  (typeof CONFIG_ACCESO!=='undefined'? CONFIG_ACCESO.solicitudes||[]:[]).filter(s=>s.estado==='Pendiente').forEach(s=>{
+    out.push({tipo:'warn', ico:'🔑', t:`Solicitud de acceso pendiente: ${s.user}`, d:`${s.tipo} · ${s.fecha} ${s.hora} · "${s.motivo}" — apruébela o recházela en Control de Acceso.`});
+  });
+  const prev = campAnterior(FILT.campania);
   SECTORES.forEach(sec=>{
     const cur = statsSector(sec.n).clima;
     if(!cur) return;
@@ -927,7 +931,7 @@ function iniciarSesion(usr){
   render();
   if(usr.debeCambiar){
     modal(`<h3>🔐 Cambio de contraseña obligatorio</h3>
-    <p class="muted small" style="margin:8px 0 14px">Por política de seguridad, en el primer inicio de sesión debe establecer una nueva contraseña (mínimo 12 caracteres, mayúsculas, minúsculas, número y símbolo). En la versión enterprise se valida con bcrypt en el servidor.</p>
+    <p class="muted small" style="margin:8px 0 14px">Por política de seguridad, en el primer inicio de sesión debe establecer una nueva contraseña (mínimo 8 caracteres, con mayúscula, minúscula y número). En la versión enterprise se valida con bcrypt en el servidor.</p>
     <label>Nueva contraseña</label><input type="password" id="np1" placeholder="••••••••••••">
     <div style="height:10px"></div><label>Confirmar contraseña</label><input type="password" id="np2">
     <div class="flex mt16" style="justify-content:flex-end">
@@ -935,12 +939,17 @@ function iniciarSesion(usr){
       <button class="btn btn-p" onclick="cambiarPass()">Guardar contraseña</button></div>`);
   }
   toast(`👋 Bienvenido, ${usr.nombre.split(' ')[0]}. Sesión iniciada como ${usr.rol}.`,'ok');
+  /* alerta automática al propietario: solicitudes de acceso pendientes */
+  if(usr.user==='jtimoteo'){
+    const pend = (CONFIG_ACCESO.solicitudes||[]).filter(s=>s.estado==='Pendiente');
+    if(pend.length) setTimeout(()=>toast(`🔔 Tiene ${pend.length} solicitud(es) de acceso pendiente(s) de aprobación. Revíselas en Control de Acceso.`,'warn'), 900);
+  }
 }
 function cambiarPass(){
   const a=$('np1').value,b=$('np2').value;
-  const fuerte = a.length>=12 && /[A-Z]/.test(a) && /[a-z]/.test(a) && /\d/.test(a) && /[^A-Za-z0-9]/.test(a);
+  const fuerte = a.length>=8 && /[A-Z]/.test(a) && /[a-z]/.test(a) && /\d/.test(a);
   if(a!==b) return toast('Las contraseñas no coinciden.','err');
-  if(!fuerte) return toast('La contraseña no cumple la política de seguridad (12+ caracteres, mayúscula, minúscula, número y símbolo).','err');
+  if(!fuerte) return toast('La contraseña no cumple la política de seguridad (mínimo 8 caracteres, con mayúscula, minúscula y número).','err');
   SESSION.pass=a; SESSION.debeCambiar=false; closeModal();
   auditar('Cambio de contraseña','Seguridad','Política cumplida');
   toast('✅ Contraseña actualizada correctamente.','ok');
@@ -950,56 +959,105 @@ function logout(){
   SESSION=null; go('landing'); initLandingStats();
 }
 
-/* ---------- NAVEGACIÓN POR ROL ---------- */
+/* ---------- NAVEGACIÓN POR ROL ----------
+   Matriz definida por el Coordinador de RR.LL.:
+   · Super Administrador (jtimoteo): acceso 100% a todo
+   · Administrador: SOLO indicadores (dashboard), resultados y exportación (reportes)
+   · Supervisor GH: SOLO aplicar encuesta + su contador de encuestas
+   · Gerencia: panel gerencial de solo lectura · Consulta: dashboard de solo lectura
+   · Entrevistados (QR): solo la encuesta, sin login
+   Cualquier otro módulo se solicita al Super Administrador (alerta automática). */
 const NAV = [
   {sec:'Principal'},
-  {id:'dashboard', ico:'📊', txt:'Dashboard Ejecutivo', roles:['Super Administrador','Administrador','Consulta']},
+  {id:'dashboard', ico:'📊', txt:'Indicadores', roles:['Super Administrador','Administrador','Consulta']},
   {id:'gerencia',  ico:'🏛️', txt:'Panel Gerencial', roles:['Super Administrador','Gerencia']},
-  {id:'supervisor',ico:'🧭', txt:'Mi Panel GH', roles:['Super Administrador','Supervisor GH']},
+  {id:'supervisor',ico:'🔢', txt:'Mi Contador de Encuestas', roles:['Super Administrador','Supervisor GH']},
   {sec:'Operación'},
-  {id:'encuesta',  ico:'📝', txt:'Aplicar Encuesta', roles:['Super Administrador','Administrador','Supervisor GH']},
-  {id:'campanias', ico:'🚩', txt:'Campañas', roles:['Super Administrador','Administrador','Supervisor GH','Consulta']},
-  {id:'qr',        ico:'🔳', txt:'Códigos QR', roles:['Super Administrador','Administrador','Supervisor GH']},
-  {id:'planes',    ico:'✅', txt:'Planes de Acción', roles:['Super Administrador','Administrador','Supervisor GH','Consulta']},
-  {id:'seguimiento',ico:'👣', txt:'Seguimiento GH', roles:['Super Administrador','Administrador','Supervisor GH']},
-  {id:'calendario',ico:'📅', txt:'Calendario', roles:['Super Administrador','Administrador','Supervisor GH','Consulta','Gerencia']},
+  {id:'encuesta',  ico:'📝', txt:'Aplicar Encuesta', roles:['Super Administrador','Supervisor GH']},
+  {id:'campanias', ico:'🚩', txt:'Campañas', roles:['Super Administrador']},
+  {id:'qr',        ico:'🔳', txt:'Códigos QR', roles:['Super Administrador']},
+  {id:'planes',    ico:'✅', txt:'Planes de Acción', roles:['Super Administrador']},
+  {id:'seguimiento',ico:'👣', txt:'Seguimiento GH', roles:['Super Administrador']},
+  {id:'calendario',ico:'📅', txt:'Calendario', roles:['Super Administrador']},
   {sec:'Inteligencia'},
-  {id:'ia',        ico:'🤖', txt:'Panel de IA', roles:['Super Administrador','Administrador','Gerencia','Consulta']},
-  {id:'alertas',   ico:'🔔', txt:'Centro de Alertas', roles:['Super Administrador','Administrador','Supervisor GH','Gerencia']},
-  {id:'reportes',  ico:'📄', txt:'Reportes Ejecutivos', roles:['Super Administrador','Administrador','Gerencia','Consulta','Supervisor GH']},
-  {id:'documentos',ico:'🗂️', txt:'Centro de Documentos', roles:['Super Administrador','Administrador','Consulta']},
+  {id:'ia',        ico:'🤖', txt:'Panel de IA', roles:['Super Administrador']},
+  {id:'alertas',   ico:'🔔', txt:'Centro de Alertas', roles:['Super Administrador']},
+  {id:'reportes',  ico:'📄', txt:'Resultados y Exportación', roles:['Super Administrador','Administrador','Gerencia']},
+  {id:'documentos',ico:'🗂️', txt:'Centro de Documentos', roles:['Super Administrador']},
   {sec:'Administración'},
-  {id:'usuarios',  ico:'👤', txt:'Usuarios', roles:['Super Administrador','Administrador']},
-  {id:'preguntas', ico:'🧩', txt:'Preguntas y Encuestas', roles:['Super Administrador','Administrador']},
+  {id:'usuarios',  ico:'👤', txt:'Usuarios', roles:['Super Administrador']},
+  {id:'preguntas', ico:'🧩', txt:'Preguntas y Encuestas', roles:['Super Administrador']},
   {id:'accesos',   ico:'⏰', txt:'Control de Acceso', roles:['Super Administrador']},
-  {id:'auditoria', ico:'🛡️', txt:'Bitácora / Auditoría', roles:['Super Administrador','Administrador']},
+  {id:'auditoria', ico:'🛡️', txt:'Bitácora / Auditoría', roles:['Super Administrador']},
   {id:'config',    ico:'⚙️', txt:'Configuración', roles:['Super Administrador']},
   {id:'sysadmin',  ico:'👑', txt:'Administración del Sistema', roles:['__owner__']},
 ];
+function tienePermisoModulo(user, id){
+  return (CONFIG_ACCESO.modulos||[]).some(m=>m.user===user && m.modulo===id);
+}
+function accesoVista(item){
+  if(!item) return true;
+  if(item.roles.includes('__owner__')) return SESSION.user==='jtimoteo';
+  return item.roles.includes(SESSION.rol) || SESSION.rol==='Super Administrador' || tienePermisoModulo(SESSION.user, item.id);
+}
 function buildNav(){
-  const r = SESSION.rol;
   let html='';
   NAV.forEach(item=>{
-    if(item.sec){ html+=`<div class="nav-sec">${item.sec}</div>`; return; }
-    const visible = item.roles.includes('__owner__') ? SESSION.user==='jtimoteo'
-                  : (item.roles.includes(r) || (r==='Super Administrador'));
-    if(!visible) return;
-    const badge = item.id==='alertas' ? `<span class="badge" id="navAlertBadge"></span>` : '';
+    if(item.sec){
+      // ocultar encabezados de sección sin módulos visibles
+      const idx = NAV.indexOf(item);
+      const hastaSig = NAV.slice(idx+1, NAV.findIndex((x,i)=>i>idx && x.sec)===-1? undefined : NAV.findIndex((x,i)=>i>idx && x.sec));
+      if(!hastaSig.some(x=>!x.sec && accesoVista(x))) return;
+      html+=`<div class="nav-sec">${item.sec}</div>`; return;
+    }
+    if(!accesoVista(item)) return;
+    let badge='';
+    if(item.id==='alertas') badge=`<span class="badge" id="navAlertBadge"></span>`;
+    if(item.id==='accesos'){
+      const nP = (CONFIG_ACCESO.solicitudes||[]).filter(s=>s.estado==='Pendiente').length;
+      if(nP) badge=`<span class="badge">${nP}</span>`;
+    }
     html+=`<button class="nav-item ${VIEW===item.id?'active':''}" data-v="${item.id}" onclick="nav('${item.id}')"><span class="ico">${item.ico}</span>${item.txt}${badge}</button>`;
   });
   $('navRoot').innerHTML=html;
   const nA = alertasInteligentes().length;
   const b=$('navAlertBadge'); if(b) b.textContent=nA;
-  $('alertDot').style.display = nA? 'block':'none';
+  $('alertDot').style.display = (nA && SESSION.rol==='Super Administrador')? 'block':'none';
 }
 function nav(v){
-  // control de permisos simulado (en enterprise: validación en servidor por endpoint)
+  // control de permisos (en enterprise: validación en servidor por endpoint)
   const item = NAV.find(x=>x.id===v);
-  if(item){
-    const ok = item.roles.includes('__owner__') ? SESSION.user==='jtimoteo' : (item.roles.includes(SESSION.rol)||SESSION.rol==='Super Administrador');
-    if(!ok){ toast('⛔ Acceso denegado. El servidor valida los permisos de su rol.','err'); auditar('Intento de acceso denegado','Seguridad','Vista: '+v); return; }
+  if(item && !accesoVista(item)){
+    auditar('Intento de acceso denegado','Seguridad','Módulo: '+item.txt);
+    solicitarModulo(item);
+    return;
   }
   VIEW=v; $('sidebar').classList.remove('open'); render();
+}
+/* solicitud de acceso a un módulo restringido → alerta automática al Super Admin */
+function solicitarModulo(item){
+  modal(`<div style="text-align:center">
+    <div style="font-size:46px;margin-bottom:6px">🔒</div>
+    <h3 style="margin-bottom:8px">Módulo restringido</h3>
+    <p class="muted small" style="max-width:380px;margin:0 auto 16px">Su perfil <b>${SESSION.rol}</b> no tiene acceso a <b>${item.txt}</b>. Puede solicitar la autorización al Coordinador de Relaciones Laborales; el sistema le enviará la alerta automáticamente.</p>
+    <div style="text-align:left"><label>Motivo de la solicitud</label>
+    <textarea id="smMotivo" rows="2" placeholder="Ej.: Necesito revisar el avance de la campaña de mi zona."></textarea></div>
+    <div class="flex mt16" style="justify-content:center">
+      <button class="btn btn-o btn-sm" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-p btn-sm" onclick="enviarSolicitudModulo('${item.id}','${item.txt.replace(/'/g,'')}')">📩 Solicitar acceso</button>
+    </div></div>`);
+}
+function enviarSolicitudModulo(id, txt){
+  const motivo = ($('smMotivo').value||'').trim();
+  if(motivo.length<5) return toast('⚠️ Describa brevemente el motivo.','warn');
+  CONFIG_ACCESO.solicitudes.unshift({
+    id:'SM-'+Date.now().toString(36).toUpperCase(), fecha:fechaHoy(), hora:new Date().toTimeString().slice(0,5),
+    user:SESSION.user, nombre:SESSION.nombre, motivo, tipo:'Módulo: '+txt, modulo:id, estado:'Pendiente',
+  });
+  guardarAcceso();
+  auditar('Solicitó acceso a módulo','Control de Acceso', txt+' · '+motivo.slice(0,50));
+  closeModal();
+  toast('📩 Solicitud enviada. El Super Administrador recibirá la alerta automáticamente.','ok');
 }
 
 /* ---------- fondo animado del login ---------- */
@@ -1294,40 +1352,40 @@ function vGerencia(){
         datalabels:{display:c=>c.dataset.data[c.dataIndex]>0, align:'top', formatter:v=>v+'%', color:css('--ink-2'), font:{size:11,weight:'700'}}}}}));
 }
 
-/* ---------- PANEL SUPERVISOR ---------- */
+/* ---------- PANEL SUPERVISOR GH: solo contador de encuestas + aplicar ----------
+   Por indicación del Coordinador de RR.LL., el Supervisor GH no visualiza
+   resultados ni indicadores de clima: únicamente su avance de aplicación. */
 function vSupervisor(){
   const mis = SESSION.sectores || (SESSION.user==='jtimoteo'? SECTORES.map(s=>s.n) : []);
-  const camp = CAMPANIAS.find(c=>c.id===FILT.campania);
+  const camp = CAMPANIAS.find(c=>c.estado==='Activa') || CAMPANIAS[CAMPANIAS.length-1];
+  const hoy = new Date().toISOString().slice(0,10);
   const rows = mis.map(n=>{
-    const st = statsSector(n);
+    const encs = DB.encuestas.filter(e=>e.campania===camp.id && e.sector===n);
     const meta = Math.round((SECTORES.find(x=>x.n===n)||{}).trabajadores * .9);
-    return {n, st, meta, falta: Math.max(0, meta-st.n)};
+    return {n, total:encs.length, hoy:encs.filter(e=>e.fecha===hoy).length, meta, falta:Math.max(0, meta-encs.length)};
   });
-  const totEnc = rows.reduce((a,r)=>a+r.st.n,0), totMeta = rows.reduce((a,r)=>a+r.meta,0);
-  const planes = DB.planes.filter(p=>mis.includes(p.sector));
-  const segs = DB.seguimientos.filter(s=>mis.includes(s.sector));
+  const tot = rows.reduce((a,r)=>a+r.total,0), totHoy = rows.reduce((a,r)=>a+r.hoy,0), totMeta = rows.reduce((a,r)=>a+r.meta,0);
+  const dias = Math.max(0, Math.ceil((new Date(camp.cierre) - new Date())/86400000));
   $('viewRoot').innerHTML = `
-  <h3 class="view-title">Mi Panel GH — ${SESSION.nombre}</h3>
-  <div class="view-sub">Sectores asignados: <b>${mis.join(', ')||'ninguno'}</b> · ${camp.nombre} (cierra ${camp.cierre})</div>
+  <h3 class="view-title">🔢 Mi Contador de Encuestas</h3>
+  <div class="view-sub">${SESSION.nombre} · Sectores: <b>${mis.join(', ')||'ninguno'}</b> · ${camp.nombre} (cierra ${camp.cierre} · faltan ${dias} días)</div>
   <div class="kpi-grid">
-    ${kpiCard('Encuestas aplicadas', totEnc, null, null,'📝', false)}
-    ${kpiCard('Meta de campaña', totMeta, null, null,'🎯', false)}
-    ${kpiCard('Cumplimiento', totMeta? totEnc/totMeta*100 : 0, 100, null,'📈')}
-    ${kpiCard('Planes de acción', planes.length, null, null,'✅', false)}
+    <div class="kpi"><div class="k-accent" style="background:var(--brand-400)"></div><div class="k-name"><span>Encuestas hoy</span><span>📅</span></div><div class="k-val">${totHoy.toLocaleString('es-PE')}</div><div class="k-meta">aplicadas el día de hoy</div></div>
+    <div class="kpi"><div class="k-accent" style="background:var(--s3)"></div><div class="k-name"><span>Total campaña</span><span>📝</span></div><div class="k-val">${tot.toLocaleString('es-PE')}</div><div class="k-meta">de ${totMeta.toLocaleString('es-PE')} (meta)</div></div>
+    <div class="kpi"><div class="k-accent" style="background:${tot/Math.max(1,totMeta)>=.9?'var(--st-exc)':'var(--st-bue)'}"></div><div class="k-name"><span>Avance</span><span>📈</span></div><div class="k-val">${pct(Math.min(100, tot/Math.max(1,totMeta)*100))}%</div><div class="k-meta">de la meta de campaña</div></div>
+    <div class="kpi"><div class="k-accent" style="background:var(--s2)"></div><div class="k-name"><span>Pendientes</span><span>⏳</span></div><div class="k-val">${rows.reduce((a,r)=>a+r.falta,0).toLocaleString('es-PE')}</div><div class="k-meta">encuestas por aplicar</div></div>
   </div>
-  <div class="charts-grid mt24">
-    <div class="card span12"><div class="card-h">📋 Avance por sector</div>
-    <table class="tbl"><thead><tr><th>Sector</th><th>Trabajadores</th><th>Encuestas</th><th>Meta</th><th>Avance</th><th>Pendientes</th><th>Clima</th><th></th></tr></thead><tbody>
-    ${rows.map(r=>`<tr><td class="b">${r.n}</td><td class="num">${r.st.trab}</td><td class="num">${r.st.n}</td><td class="num">${r.meta}</td>
-      <td style="width:22%"><div class="flex"><div class="bar-track grow"><div class="bar-fill" style="width:${Math.min(100,r.st.n/r.meta*100)}%"></div></div><span class="num small b">${pct(Math.min(100,r.st.n/r.meta*100))}%</span></div></td>
-      <td class="num">${r.falta}</td><td>${r.st.n? chipSem(r.st.clima):'—'}</td>
-      <td><button class="btn btn-p btn-sm" onclick="nav('encuesta')">Aplicar</button></td></tr>`).join('')}
-    </tbody></table></div>
-    <div class="card span6"><div class="card-h">✅ Planes de acción de mis sectores</div>
-      ${planes.length? planes.map(p=>`<div class="kb-card" onclick="verPlan('${p.cod}')"><span class="code">${p.cod}</span><b>${p.objetivo}</b>
-      <div class="flex between"><span class="chip chip-info">${p.sector}</span><span class="small muted">${p.avance}% · ${p.estado}</span></div></div>`).join(''):'<p class="muted small mt8">Sin planes asignados.</p>'}</div>
-    <div class="card span6"><div class="card-h">👣 Últimos seguimientos</div>
-      ${segs.length? `<table class="tbl">${segs.map(s=>`<tr><td><span class="chip chip-neutral">${s.tipo}</span></td><td><b>${s.sector}</b><div class="small muted">${s.detalle}</div></td><td class="small muted num">${s.fecha}</td></tr>`).join('')}</table>`:'<p class="muted small mt8">Sin registros.</p>'}</div>
+  <div class="card mt24" style="max-width:760px">
+    <div class="card-h">📋 Mi avance por sector</div>
+    <table class="tbl"><thead><tr><th>Sector</th><th>Hoy</th><th>Total</th><th>Meta</th><th>Avance</th><th>Pendientes</th></tr></thead><tbody>
+    ${rows.map(r=>`<tr><td class="b">${r.n}</td><td class="num">${r.hoy}</td><td class="num">${r.total}</td><td class="num">${r.meta}</td>
+      <td style="width:30%"><div class="flex"><div class="bar-track grow"><div class="bar-fill" style="width:${Math.min(100,r.total/Math.max(1,r.meta)*100)}%"></div></div><span class="num small b">${pct(Math.min(100,r.total/Math.max(1,r.meta)*100))}%</span></div></td>
+      <td class="num">${r.falta}</td></tr>`).join('')}
+    </tbody></table>
+    <div class="flex mt16" style="justify-content:center">
+      <button class="btn btn-p" style="padding:14px 34px;font-size:15px" onclick="nav('encuesta')">📝 Aplicar nueva encuesta</button>
+    </div>
+    <p class="small muted mt8" style="text-align:center">Los resultados de clima laboral son gestionados por el Área de Relaciones Laborales.</p>
   </div>`;
 }
 </script>
@@ -2134,7 +2192,8 @@ function vUsuarios(){
   </tbody></table></div>
   <div class="card mt16" style="max-width:860px"><div class="card-h">🛡️ Políticas de seguridad activas</div>
   <ul style="margin-left:18px;font-size:13px;color:var(--ink-2);line-height:2">
-    <li>Contraseñas: mínimo 12 caracteres, mayúsculas, minúsculas, número y símbolo · hash bcrypt · sin repetir las últimas 5</li>
+    <li>Contraseñas: mínimo 8 caracteres, con mayúscula, minúscula y número · hash bcrypt · sin repetir las últimas 5</li>
+    <li>Perfiles: Administrador → solo Indicadores, Resultados y Exportación · Supervisor GH → solo Encuesta y su Contador · Entrevistados → solo responden por QR · módulos adicionales requieren autorización del Super Administrador</li>
     <li>Bloqueo automático de 15 minutos tras 5 intentos fallidos, con registro de IP, navegador, fecha y hora</li>
     <li>Tokens JWT con expiración configurable · cierre de sesión por inactividad (15 min) · cookies HttpOnly/Secure</li>
     <li>Rate limiting anti fuerza bruta · protección CSRF/XSS/inyección SQL · validación de permisos por endpoint</li>
@@ -2447,14 +2506,15 @@ const CONFIG_ACCESO = {
     {f:'2026-12-25', n:'Navidad'},
     {f:'2027-01-01', n:'Año Nuevo'},
   ],
-  permisos: [],     // [{user, fecha, otorgadoPor}]
+  permisos: [],     // [{user, fecha, otorgadoPor}] — acceso por día
+  modulos: [],      // [{user, modulo, otorgadoPor}] — acceso permanente a un módulo restringido
   solicitudes: [],  // [{id, fecha, hora, user, nombre, motivo, tipo, estado}]
 };
 /* estado local persistente (el modo producción además sincroniza con la hoja Config) */
 (function cargarAccesoLocal(){
   try{
     const s = JSON.parse(localStorage.getItem('sigcl_acceso')||'null');
-    if(s){ ['horario','feriados','permisos','solicitudes'].forEach(k=>{ if(s[k]) CONFIG_ACCESO[k]=s[k]; }); }
+    if(s){ ['horario','feriados','permisos','solicitudes','modulos'].forEach(k=>{ if(s[k]) CONFIG_ACCESO[k]=s[k]; }); }
   }catch(e){}
 })();
 function guardarAcceso(){
@@ -2465,7 +2525,7 @@ function aplicarConfigRemota(str){
   try{
     const c = (typeof str==='string')? JSON.parse(str) : str;
     if(!c) return;
-    ['horario','feriados','permisos','solicitudes'].forEach(k=>{ if(c[k]) CONFIG_ACCESO[k]=c[k]; });
+    ['horario','feriados','permisos','solicitudes','modulos'].forEach(k=>{ if(c[k]) CONFIG_ACCESO[k]=c[k]; });
     try{ localStorage.setItem('sigcl_acceso', JSON.stringify(CONFIG_ACCESO)); }catch(e){}
   }catch(e){}
 }
@@ -2595,6 +2655,20 @@ function vAccesos(){
         <button class="btn btn-o btn-sm" onclick="otorgarPermiso()">＋ Otorgar</button>
       </div>
     </div>
+
+    <div class="card span12"><div class="card-h">🧩 Permisos de módulos</div>
+      <div class="card-sub">Módulos adicionales autorizados por usted a usuarios restringidos · vigentes hasta que los revoque</div>
+      ${CONFIG_ACCESO.modulos.length? `<table class="tbl">
+        ${CONFIG_ACCESO.modulos.map((m,i)=>{const it=NAV.find(x=>x.id===m.modulo)||{};return `<tr>
+          <td class="b">${m.user}</td><td>${it.ico||'🧩'} ${it.txt||m.modulo}</td><td class="small muted">otorgado por ${m.otorgadoPor||'—'}</td>
+          <td style="text-align:right"><button class="btn btn-o btn-sm" onclick="CONFIG_ACCESO.modulos.splice(${i},1);guardarAcceso();auditar('Revocó permiso de módulo','Control de Acceso','${m.user} · ${m.modulo}');render();toast('Permiso revocado.','ok')">🗑️ Revocar</button></td></tr>`}).join('')}
+      </table>` : '<p class="muted small mt8">Ningún usuario tiene módulos adicionales. Cuando alguien solicite acceso a un módulo restringido, la solicitud aparecerá arriba y usted decidirá.</p>'}
+      <div class="flex mt16 wrap">
+        <select id="moUser" style="max-width:180px">${USUARIOS.filter(u=>u.user!=='jtimoteo').map(u=>`<option>${u.user}</option>`).join('')}</select>
+        <select id="moMod" style="max-width:240px">${NAV.filter(x=>!x.sec && x.id!=='sysadmin').map(x=>`<option value="${x.id}">${x.ico} ${x.txt}</option>`).join('')}</select>
+        <button class="btn btn-o btn-sm" onclick="CONFIG_ACCESO.modulos.push({user:$('moUser').value, modulo:$('moMod').value, otorgadoPor:SESSION.user});guardarAcceso();auditar('Otorgó permiso de módulo','Control de Acceso',$('moUser').value+' · '+$('moMod').value);render();toast('✅ Módulo autorizado.','ok')">＋ Autorizar módulo</button>
+      </div>
+    </div>
   </div>`;
 }
 function guardarHorario(){
@@ -2625,10 +2699,17 @@ function canjearFeriado(i){
 function resolverSolicitud(id, aprobar){
   const s = CONFIG_ACCESO.solicitudes.find(x=>x.id===id); if(!s) return;
   s.estado = aprobar? 'Aprobada':'Rechazada';
-  if(aprobar) CONFIG_ACCESO.permisos.push({user:s.user, fecha:fechaHoy(), otorgadoPor:SESSION? SESSION.user:'jtimoteo'});
+  if(aprobar){
+    if(s.modulo){
+      if(!CONFIG_ACCESO.modulos.some(m=>m.user===s.user && m.modulo===s.modulo))
+        CONFIG_ACCESO.modulos.push({user:s.user, modulo:s.modulo, otorgadoPor:SESSION? SESSION.user:'jtimoteo'});
+    } else {
+      CONFIG_ACCESO.permisos.push({user:s.user, fecha:fechaHoy(), otorgadoPor:SESSION? SESSION.user:'jtimoteo'});
+    }
+  }
   guardarAcceso();
-  auditar(aprobar?'Aprobó solicitud de acceso':'Rechazó solicitud de acceso','Control de Acceso', s.user+' · '+s.motivo.slice(0,50));
-  render(); toast(aprobar? `✅ ${s.user} tiene acceso por hoy.` : 'Solicitud rechazada.','ok');
+  auditar(aprobar?'Aprobó solicitud de acceso':'Rechazó solicitud de acceso','Control de Acceso', s.user+' · '+s.tipo+' · '+s.motivo.slice(0,50));
+  render(); toast(aprobar? (s.modulo? `✅ ${s.user} ahora tiene acceso al módulo (hasta que usted lo revoque).` : `✅ ${s.user} tiene acceso por hoy.`) : 'Solicitud rechazada.','ok');
 }
 function otorgarPermiso(){
   CONFIG_ACCESO.permisos.push({user:$('pmUser').value, fecha:$('pmFecha').value, otorgadoPor:SESSION? SESSION.user:'jtimoteo'});
