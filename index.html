@@ -531,15 +531,15 @@ const pick = arr => arr[Math.floor(rnd()*arr.length)];
 /* ---------- CATÁLOGOS ---------- */
 const EMPRESAS = ['VERFRUT S.A.C.','RAPEL S.A.C.'];
 const SUPERVISORES = {
-  'Poltinario':            {sectores:['Papayo','Limones','Administración']},
+  'Pool Tamayo Rodríguez':            {sectores:['Papayo','Limones','Administración']},
   'Alexander Tineo Ramos': {sectores:['Olivares Bajo']},
   'Flor Pulache Viera':    {sectores:['Los Olivares']},
-  'Alex Fabián Zapata Juárez':{sectores:['Aprova']},
+  'Alex Fabián Zapata Juárez':{sectores:['Aproa']},
   'Yaneli Geraldine Luz Venegas':{sectores:['Santa Rosa']},
   'Alexander Martínez Juárez':{sectores:['Punta Arenas']},
   'Sergio Viera Girón':    {sectores:['Algarrobos']},
   'Elbert Castro Bayona':  {sectores:['San Vicente']},
-  'Ermeco':                {sectores:['Planta Rapel Alto']},
+  'Ermeco':                {sectores:['Planta Packing']},
 };
 /* perfil = sesgo de clima del sector para los datos demo (0-1) */
 const SECTORES = [
@@ -547,21 +547,21 @@ const SECTORES = [
   {n:'Limones',         emp:'VERFRUT S.A.C.', trabajadores:74,  perfil:.80},
   {n:'Olivares Bajo',   emp:'VERFRUT S.A.C.', trabajadores:88,  perfil:.88},
   {n:'Los Olivares',    emp:'VERFRUT S.A.C.', trabajadores:110, perfil:.83},
-  {n:'Aprova',          emp:'VERFRUT S.A.C.', trabajadores:67,  perfil:.77},
+  {n:'Aproa',          emp:'VERFRUT S.A.C.', trabajadores:67,  perfil:.77},
   {n:'Santa Rosa',      emp:'VERFRUT S.A.C.', trabajadores:93,  perfil:.72},
   {n:'Punta Arenas',    emp:'VERFRUT S.A.C.', trabajadores:81,  perfil:.55},
   {n:'Algarrobos',      emp:'VERFRUT S.A.C.', trabajadores:59,  perfil:.79},
   {n:'San Vicente',     emp:'VERFRUT S.A.C.', trabajadores:72,  perfil:.68},
-  {n:'Planta Rapel Alto',emp:'RAPEL S.A.C.',  trabajadores:140, perfil:.75},
+  {n:'Planta Packing',emp:'RAPEL S.A.C.',  trabajadores:140, perfil:.75},
   {n:'Administración',  emp:'RAPEL S.A.C.',   trabajadores:38,  perfil:.84},
 ];
 const supervisorDe = s => Object.keys(SUPERVISORES).find(k=>SUPERVISORES[k].sectores.includes(s))||'—';
 
 const JEFES = {
   'Papayo':['J. Córdova','M. Sandoval'],'Limones':['R. Palacios'],'Olivares Bajo':['C. Ruiz','E. Farfán'],
-  'Los Olivares':['A. Chuquimango','L. Peña'],'Aprova':['V. Salazar'],'Santa Rosa':['H. Moscol','D. Ancajima'],
+  'Los Olivares':['A. Chuquimango','L. Peña'],'Aproa':['V. Salazar'],'Santa Rosa':['H. Moscol','D. Ancajima'],
   'Punta Arenas':['F. Talledo','G. Ipanaqué'],'Algarrobos':['P. Vílchez'],'San Vicente':['N. Sernaqué'],
-  'Planta Rapel Alto':['O. Vilela','K. Zapata','B. Herrera'],'Administración':['S. Núñez'],
+  'Planta Packing':['O. Vilela','K. Zapata','B. Herrera'],'Administración':['S. Núñez'],
 };
 const TIEMPO_EMPRESA = ['Menos de 3 meses','3 a 12 meses','1 a 3 años','Más de 3 años'];
 const TIPO_TRABAJADOR = ['Obrero','Empleado','Practicante'];
@@ -1422,12 +1422,20 @@ function vEncuestaApp(){
   if(!SURVEY || SURVEY.done) SURVEY=nuevoSurvey();
   renderSurvey('surveyRootApp', false);
 }
+/* sectores con selección de área específica para el personal encuestado */
+const AREAS_ESPECIALES = {
+  'Planta Packing': ['Arándanos','Planta Administración','Palto'],
+  'Administración': ['Arándanos','Planta Administración','Palto'],
+};
+let SURVEY_ROOT='surveyRoot', SURVEY_PUB=true;
+
 /* pasos dinámicos: 0 datos · 1..N dimensiones · N+1 abiertas (el editor de preguntas puede cambiar N) */
 const totalPasos = () => DIMENSIONES.length + 2;
 const totalPreguntas = () => DIMENSIONES.reduce((a,d)=>a+d.preguntas.length,0);
 const offsetPreguntas = di => DIMENSIONES.slice(0,di).reduce((a,d)=>a+d.preguntas.length,0);
 
 function renderSurvey(rootId, publico){
+  SURVEY_ROOT = rootId; SURVEY_PUB = publico;
   const root = $(rootId);
   const s = SURVEY;
   const TOTAL_PASOS = totalPasos();
@@ -1449,10 +1457,22 @@ function renderSurvey(rootId, publico){
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div><label>Empresa</label><select id="svEmp"><option value="">Seleccione…</option>${EMPRESAS.map(e=>`<option ${s.datos.empresa===e?'selected':''}>${e}</option>`).join('')}</select></div>
         <div><label>Sector</label><select id="svSec" onchange="svSector(this.value)"><option value="">Seleccione…</option>${SECTORES.map(x=>`<option ${s.datos.sector===x.n?'selected':''}>${x.n}</option>`).join('')}</select></div>
-        <div><label>Área</label><select id="svArea"><option value="">Seleccione…</option><option ${s.datos.area==='Campo'?'selected':''}>Campo</option><option ${s.datos.area==='Packing / Oficina'?'selected':''}>Packing / Oficina</option></select></div>
+        <div><label>Área</label>${svAreaSelectHTML(s)}</div>
         <div><label>Tiempo en la empresa</label><select id="svTiempo"><option value="">Seleccione…</option>${TIEMPO_EMPRESA.map(t=>`<option ${s.datos.tiempo===t?'selected':''}>${t}</option>`).join('')}</select></div>
         <div><label>Tipo de trabajador</label><select id="svTipo"><option value="">Seleccione…</option>${TIPO_TRABAJADOR.map(t=>`<option ${s.datos.tipo===t?'selected':''}>${t}</option>`).join('')}</select></div>
-        <div><label>Jefe evaluado</label><select id="svJefe"><option value="">Seleccione el sector primero…</option>${s.datos.sector? JEFES[s.datos.sector].map(j=>`<option ${s.datos.jefe===j?'selected':''}>${j}</option>`).join(''):''}</select></div>
+        <div><label>Jefe / Supervisor evaluado</label><select id="svJefe" onchange="svJefeChange(this.value)">
+          <option value="">${s.datos.sector? 'Seleccione…':'Seleccione el sector primero…'}</option>
+          ${s.datos.sector? (JEFES[s.datos.sector]||[]).map(j=>`<option ${s.datos.jefe===j?'selected':''}>${j}</option>`).join(''):''}
+          ${s.datos.sector? `<option value="__otro__">✏️ No está en la lista — registrar manualmente</option>`:''}
+        </select></div>
+      </div>
+      <div id="svAreaOtroWrap" class="mt8" style="display:${s.datos.areaSel==='Otros'?'block':'none'}">
+        <label>✏️ Indique su área (se registrará en el sistema)</label>
+        <input id="svAreaOtro" placeholder="Escriba el nombre de su área…" value="${s.datos.areaOtro||''}">
+      </div>
+      <div id="svJefeOtroWrap" class="mt8" style="display:none">
+        <label>✏️ Escriba el nombre del jefe o supervisor que evalúa (se registrará en el sistema)</label>
+        <input id="svJefeOtro" placeholder="Nombres y apellidos del jefe / supervisor…">
       </div>
       <div class="mt16" style="background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:12.5px" id="svSupBox">
         ${s.datos.sector? `👤 Supervisor GH responsable (automático): <b>${supervisorDe(s.datos.sector)}</b>` : '👤 El Supervisor GH responsable se asignará automáticamente al elegir el sector.'}
@@ -1499,11 +1519,34 @@ function renderSurvey(rootId, publico){
   root.innerHTML = inner;
   window.scrollTo({top:0,behavior:'smooth'});
 }
+function svAreaSelectHTML(s){
+  const esp = AREAS_ESPECIALES[s.datos.sector];
+  const opts = esp ? [...esp, 'Otros'] : ['Campo','Packing / Oficina'];
+  return `<select id="svArea" onchange="svAreaChange(this.value)">
+    <option value="">Seleccione…</option>
+    ${opts.map(a=>`<option ${s.datos.areaSel===a?'selected':''}>${a}</option>`).join('')}
+  </select>${esp? `<div class="small muted" style="margin-top:4px">🧑‍🌾 Estimado colaborador: indique el área donde labora.</div>`:''}`;
+}
+function svCaptureStep0(){
+  const s=SURVEY;
+  if(!$('svEmp')) return;
+  s.datos.empresa=$('svEmp').value; s.datos.areaSel=$('svArea')? $('svArea').value:''; s.datos.areaOtro=$('svAreaOtro')? $('svAreaOtro').value:'';
+  s.datos.tiempo=$('svTiempo').value; s.datos.tipo=$('svTipo').value;
+}
 function svSector(v){
-  SURVEY.datos.sector=v;
-  const jefeSel=$('svJefe');
-  jefeSel.innerHTML = `<option value="">Seleccione…</option>`+(v? JEFES[v].map(j=>`<option>${j}</option>`).join(''):'');
-  $('svSupBox').innerHTML = v? `👤 Supervisor GH responsable (automático): <b>${supervisorDe(v)}</b>` : '👤 Se asignará automáticamente.';
+  svCaptureStep0();
+  SURVEY.datos.sector=v; SURVEY.datos.jefe=''; SURVEY.datos.areaSel=''; SURVEY.datos.areaOtro='';
+  renderSurvey(SURVEY_ROOT, SURVEY_PUB); // re-dibuja área y jefes según el sector
+  setTimeout(()=>{ const b=$('svSupBox'); if(b) b.innerHTML = v? `👤 Supervisor GH responsable (automático): <b>${supervisorDe(v)}</b>` : '👤 Se asignará automáticamente.'; },30);
+}
+function svAreaChange(v){
+  SURVEY.datos.areaSel=v;
+  const w=$('svAreaOtroWrap'); if(w) w.style.display = v==='Otros'? 'block':'none';
+  if(v==='Otros') setTimeout(()=>{const i=$('svAreaOtro'); if(i) i.focus();},50);
+}
+function svJefeChange(v){
+  const w=$('svJefeOtroWrap'); if(w) w.style.display = v==='__otro__'? 'block':'none';
+  if(v==='__otro__') setTimeout(()=>{const i=$('svJefeOtro'); if(i) i.focus();},50);
 }
 function svAnswer(k,qi,v,rootId,publico){
   SURVEY.resp[k][qi]=v;
@@ -1518,8 +1561,27 @@ function svAnswer(k,qi,v,rootId,publico){
 function svNext(paso,rootId,publico){
   const s=SURVEY;
   if(paso===0){
-    s.datos = {empresa:$('svEmp').value, sector:$('svSec').value, area:$('svArea').value, tiempo:$('svTiempo').value, tipo:$('svTipo').value, jefe:$('svJefe').value};
-    const falta = Object.entries(s.datos).filter(([k,v])=>!v);
+    const areaSel = $('svArea').value;
+    let area = areaSel;
+    if(areaSel==='Otros'){
+      const otro = ($('svAreaOtro').value||'').trim();
+      if(otro.length<3) return toast('⚠️ Escriba el nombre de su área para registrarla.','warn');
+      area = otro;
+    }
+    let jefe = $('svJefe').value;
+    if(jefe==='__otro__'){
+      const nombre = ($('svJefeOtro').value||'').trim();
+      if(nombre.length<5) return toast('⚠️ Escriba el nombre completo del jefe o supervisor que evalúa.','warn');
+      jefe = nombre.split(/\s+/).map(w=> w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(' ');
+      const sec = $('svSec').value;
+      if(sec){
+        if(!JEFES[sec]) JEFES[sec]=[];
+        if(!JEFES[sec].includes(jefe)){ JEFES[sec].push(jefe); auditar('Registró jefe evaluado manualmente','Encuestas', jefe+' · '+sec); }
+      }
+      toast('✅ Jefe/supervisor «'+jefe+'» registrado en el sistema.','ok');
+    }
+    s.datos = {empresa:$('svEmp').value, sector:$('svSec').value, area, areaSel, areaOtro: areaSel==='Otros'? area:'', tiempo:$('svTiempo').value, tipo:$('svTipo').value, jefe};
+    const falta = ['empresa','sector','area','tiempo','tipo','jefe'].filter(k=>!s.datos[k]);
     if(falta.length) return toast('⚠️ Complete todos los datos generales antes de continuar.','warn');
   } else {
     const d=DIMENSIONES[paso-1];
