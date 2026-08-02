@@ -814,12 +814,12 @@ if(ES_DEMO) (function generarEncuestas(){
 /* ---------- USUARIOS ---------- */
 const USUARIOS = [
   {user:'jtimoteo', nombre:'Joel Ángel Timoteo Gonza', rol:'Super Administrador', cargo:'Coordinador de Relaciones Laborales', correo:'jtimoteo@unifrutti.com', estado:'Activo', ultimo:'2026-08-01 07:42', ip:'190.234.18.7', disp:'Chrome · Windows 11', protegido:true, pass:'jtimoteo2026', debeCambiar:true},
-  {user:'admin', nombre:'Administrador GH', rol:'Administrador', cargo:'Analista de Gestión Humana', correo:'gh@unifrutti.com', estado:'Activo', ultimo:'2026-07-31 16:10', ip:'190.234.18.9', disp:'Edge · Windows 10', pass:'demo'},
-  {user:'fpulache', nombre:'Flor Pulache Viera', rol:'Supervisor GH', cargo:'Supervisora GH', correo:'fpulache@unifrutti.com', estado:'Activo', ultimo:'2026-07-31 14:55', ip:'10.20.4.31', disp:'Android · Tablet', sectores:['Los Olivares'], pass:'demo'},
-  {user:'amartinez', nombre:'Alexander Martínez Juárez', rol:'Supervisor GH', cargo:'Supervisor GH', correo:'amartinez@unifrutti.com', estado:'Activo', ultimo:'2026-07-30 11:02', ip:'10.20.4.44', disp:'Android · Celular', sectores:['Punta Arenas'], pass:'demo'},
-  {user:'atineo', nombre:'Alexander Tineo Ramos', rol:'Supervisor GH', cargo:'Supervisor GH', correo:'atineo@unifrutti.com', estado:'Activo', ultimo:'2026-07-29 09:18', ip:'10.20.4.52', disp:'Chrome · Windows 10', sectores:['Olivares Bajo'], pass:'demo'},
-  {user:'gerencia', nombre:'Gerencia General', rol:'Gerencia', cargo:'Gerente General', correo:'gerencia@unifrutti.com', estado:'Activo', ultimo:'2026-07-28 18:30', ip:'190.234.18.2', disp:'Safari · MacOS', pass:'demo'},
-  {user:'consulta', nombre:'Usuario Consulta', rol:'Consulta', cargo:'Comité ETI', correo:'eti@unifrutti.com', estado:'Activo', ultimo:'2026-07-25 10:00', ip:'190.234.18.5', disp:'Chrome · Windows 11', pass:'demo'},
+  {user:'admin', nombre:'Administrador GH', rol:'Administrador', cargo:'Analista de Gestión Humana', correo:'gh@unifrutti.com', estado:'Activo', ultimo:'2026-07-31 16:10', ip:'190.234.18.9', disp:'Edge · Windows 10', pass:'admin2026'},
+  {user:'fpulache', nombre:'Flor Pulache Viera', rol:'Supervisor GH', cargo:'Supervisora GH', correo:'fpulache@unifrutti.com', estado:'Activo', ultimo:'2026-07-31 14:55', ip:'10.20.4.31', disp:'Android · Tablet', sectores:['Los Olivares'], pass:'fpulache2026'},
+  {user:'amartinez', nombre:'Alexander Martínez Juárez', rol:'Supervisor GH', cargo:'Supervisor GH', correo:'amartinez@unifrutti.com', estado:'Activo', ultimo:'2026-07-30 11:02', ip:'10.20.4.44', disp:'Android · Celular', sectores:['Punta Arenas'], pass:'amartinez2026'},
+  {user:'atineo', nombre:'Alexander Tineo Ramos', rol:'Supervisor GH', cargo:'Supervisor GH', correo:'atineo@unifrutti.com', estado:'Activo', ultimo:'2026-07-29 09:18', ip:'10.20.4.52', disp:'Chrome · Windows 10', sectores:['Olivares Bajo'], pass:'atineo2026'},
+  {user:'gerencia', nombre:'Gerencia General', rol:'Gerencia', cargo:'Gerente General', correo:'gerencia@unifrutti.com', estado:'Activo', ultimo:'2026-07-28 18:30', ip:'190.234.18.2', disp:'Safari · MacOS', pass:'gerencia2026'},
+  {user:'consulta', nombre:'Usuario Consulta', rol:'Consulta', cargo:'Comité ETI', correo:'eti@unifrutti.com', estado:'Activo', ultimo:'2026-07-25 10:00', ip:'190.234.18.5', disp:'Chrome · Windows 11', pass:'consulta2026'},
 ];
 
 /* ---------- PLANES DE ACCIÓN DEMO ---------- */
@@ -1102,7 +1102,7 @@ function cambiarPass(){
   const fuerte = a.length>=8 && /[A-Z]/.test(a) && /[a-z]/.test(a) && /\d/.test(a);
   if(a!==b) return toast('Las contraseñas no coinciden.','err');
   if(!fuerte) return toast('La contraseña no cumple la política de seguridad (mínimo 8 caracteres, con mayúscula, minúscula y número).','err');
-  SESSION.pass=a; SESSION.debeCambiar=false; closeModal();
+  SESSION.pass=a; SESSION.debeCambiar=false; if(typeof upsertUsuarioPersistente==='function') upsertUsuarioPersistente(SESSION.user, {pass:a}); closeModal();
   auditar('Cambio de contraseña','Seguridad','Política cumplida');
   toast('✅ Contraseña actualizada correctamente.','ok');
 }
@@ -2448,7 +2448,7 @@ function vUsuarios(){
     <td class="muted">${u.cargo}</td><td class="num small">${u.ultimo}</td><td class="small muted">${u.ip}<br>${u.disp}</td>
     <td><span class="chip ${u.estado==='Activo'?'chip-exc':'chip-cri'}">● ${u.estado}</span></td>
     <td class="no-print">${u.protegido? '<span class="small muted">Propietario<br>indestructible</span>' :
-      `<div class="flex"><button class="btn btn-o btn-sm" onclick="toast('🔑 Contraseña temporal generada: '+genPass()+' (simulado)','ok')" title="Restablecer contraseña">🔑</button>
+      `<div class="flex"><button class="btn btn-o btn-sm" onclick="resetPass('${u.user}')" title="Restablecer contraseña">🔑</button>
       <button class="btn btn-o btn-sm" onclick="toggleBloqueo('${u.user}')" title="Bloquear/Desbloquear">${u.estado==='Activo'?'🔒':'🔓'}</button></div>`}</td>
   </tr>`).join('')}
   </tbody></table></div>
@@ -2494,12 +2494,29 @@ function nuevoUsuario(){
 function crearUsuario(){
   const u=$('nuUser').value.trim()||'nuevo';
   USUARIOS.push({user:u, nombre:($('nuNombres').value+' '+$('nuApellidos').value).trim()||u, rol:$('nuRol').value, cargo:$('nuRol').value, correo:u+'@unifrutti.com', estado:'Activo', ultimo:'—', ip:'—', disp:'—', pass:$('nuPass').value});
+  upsertUsuarioPersistente(u, {});  // queda guardado: ingresa directo desde cualquier dispositivo
   auditar('Creó usuario','Usuarios','Usuario '+u+' · rol '+$('nuRol').value);
-  closeModal(); render(); toast('✅ Usuario '+u+' creado. Deberá cambiar su contraseña en el primer acceso.','ok');
+  closeModal(); render();
+  modal(`<h3>✅ Usuario creado</h3><p class="muted small" style="margin:8px 0 12px">Entregue estas credenciales. El usuario ingresa directamente con ellas.</p>
+  <table class="tbl"><tr><td class="muted">Usuario</td><td class="b">${u}</td></tr>
+  <tr><td class="muted">Contraseña</td><td class="b" style="font-family:monospace">${USUARIOS.find(x=>x.user===u).pass}</td></tr>
+  <tr><td class="muted">Rol</td><td>${USUARIOS.find(x=>x.user===u).rol}</td></tr></table>
+  <div class="flex mt16" style="justify-content:flex-end"><button class="btn btn-p" onclick="closeModal()">Entendido</button></div>`);
+}
+function resetPass(user){
+  const u = USUARIOS.find(x=>x.user===user); if(!u) return;
+  const np = genPass();
+  u.pass = np;
+  upsertUsuarioPersistente(user, {pass:np});
+  auditar('Restableció contraseña','Usuarios', user);
+  modal(`<h3>🔑 Contraseña restablecida</h3><p class="muted small" style="margin:8px 0 12px">Entregue la nueva credencial a <b>${u.nombre}</b>. Ingresa directamente con ella.</p>
+  <table class="tbl"><tr><td class="muted">Usuario</td><td class="b">${user}</td></tr><tr><td class="muted">Nueva contraseña</td><td class="b" style="font-family:monospace">${np}</td></tr></table>
+  <div class="flex mt16" style="justify-content:flex-end"><button class="btn btn-p" onclick="closeModal()">Entendido</button></div>`);
 }
 function toggleBloqueo(user){
   const u=USUARIOS.find(x=>x.user===user);
   u.estado = u.estado==='Activo'?'Bloqueado':'Activo';
+  upsertUsuarioPersistente(user, {estado:u.estado});
   auditar(u.estado==='Bloqueado'?'Bloqueó usuario':'Desbloqueó usuario','Usuarios',user);
   render(); toast((u.estado==='Bloqueado'?'🔒 Usuario bloqueado: ':'🔓 Usuario desbloqueado: ')+user, u.estado==='Bloqueado'?'warn':'ok');
 }
@@ -2771,12 +2788,36 @@ const CONFIG_ACCESO = {
   permisos: [],     // [{user, fecha, otorgadoPor}] — acceso por día
   modulos: [],      // [{user, modulo, otorgadoPor}] — acceso permanente a un módulo restringido
   solicitudes: [],  // [{id, fecha, hora, user, nombre, motivo, tipo, estado}]
+  usuarios: [],     // usuarios creados/modificados por el Super Admin — ingresan directo en cualquier dispositivo
 };
+/* aplica los usuarios persistidos sobre el catálogo base (crea nuevos o actualiza clave/rol/estado) */
+function sincronizarUsuarios(){
+  (CONFIG_ACCESO.usuarios||[]).forEach(function(cu){
+    if(!cu || !cu.user || cu.user==='jtimoteo' && cu.rol!=='Super Administrador') return;
+    const ex = USUARIOS.find(u=>u.user===cu.user);
+    if(ex) Object.assign(ex, cu);
+    else USUARIOS.push(Object.assign({}, cu));
+  });
+}
+/* guarda (o actualiza) un usuario en la configuración persistente */
+function upsertUsuarioPersistente(user, cambios){
+  if(!CONFIG_ACCESO.usuarios) CONFIG_ACCESO.usuarios = [];
+  let e = CONFIG_ACCESO.usuarios.find(x=>x.user===user);
+  if(!e){
+    const b = USUARIOS.find(u=>u.user===user) || {user};
+    e = {user:b.user, nombre:b.nombre||user, rol:b.rol||'Consulta', cargo:b.cargo||'', correo:b.correo||'',
+         estado:b.estado||'Activo', sectores:b.sectores, pass:b.pass, ultimo:b.ultimo||'—', ip:b.ip||'—', disp:b.disp||'—'};
+    CONFIG_ACCESO.usuarios.push(e);
+  }
+  Object.assign(e, cambios||{});
+  sincronizarUsuarios();
+  guardarAcceso();
+}
 /* estado local persistente (el modo producción además sincroniza con la hoja Config) */
 (function cargarAccesoLocal(){
   try{
     const s = JSON.parse(localStorage.getItem('sigcl_acceso')||'null');
-    if(s){ ['horario','feriados','permisos','solicitudes','modulos'].forEach(k=>{ if(s[k]) CONFIG_ACCESO[k]=s[k]; }); }
+    if(s){ ['horario','feriados','permisos','solicitudes','modulos','usuarios'].forEach(k=>{ if(s[k]) CONFIG_ACCESO[k]=s[k]; }); sincronizarUsuarios(); }
   }catch(e){}
 })();
 function guardarAcceso(){
@@ -2787,7 +2828,8 @@ function aplicarConfigRemota(str){
   try{
     const c = (typeof str==='string')? JSON.parse(str) : str;
     if(!c) return;
-    ['horario','feriados','permisos','solicitudes','modulos'].forEach(k=>{ if(c[k]) CONFIG_ACCESO[k]=c[k]; });
+    ['horario','feriados','permisos','solicitudes','modulos','usuarios'].forEach(k=>{ if(c[k]) CONFIG_ACCESO[k]=c[k]; });
+    sincronizarUsuarios();
     try{ localStorage.setItem('sigcl_acceso', JSON.stringify(CONFIG_ACCESO)); }catch(e){}
   }catch(e){}
 }
