@@ -330,6 +330,53 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px}
   body{background:#fff}
   .main{padding:0;max-width:none}
 }
+
+/* ===================== IDENTIDAD VISUAL SIGCL · toques únicos ===================== */
+/* patrón sutil de puntos corporativos en el fondo del landing */
+#landing::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;
+  background-image:radial-gradient(rgba(42,120,214,.14) 1.2px, transparent 1.2px);background-size:26px 26px}
+[data-theme="dark"] #landing::before{background-image:radial-gradient(rgba(85,152,231,.10) 1.2px, transparent 1.2px)}
+/* título del landing con degradado animado azul→rojo */
+.land-title span{background-size:220% 220%;animation:hueFlow 7s ease-in-out infinite}
+@keyframes hueFlow{0%,100%{background-position:0% 40%}50%{background-position:100% 60%}}
+.land-kicker{border-left:3px solid var(--red-400)}
+/* títulos de vista con subrayado degradado marca */
+.view-title{position:relative;display:inline-block;padding-bottom:6px}
+.view-title::after{content:"";position:absolute;left:0;bottom:0;width:52px;height:4px;border-radius:4px;
+  background:linear-gradient(90deg,var(--red-400),var(--brand-400))}
+/* transición suave entre módulos */
+.main-fade{animation:viewIn .38s cubic-bezier(.2,.8,.2,1)}
+@keyframes viewIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+/* KPI premium: degradado, brillo lateral y elevación */
+.kpi{background:linear-gradient(165deg,var(--surface) 60%,var(--surface-2));overflow:hidden}
+.kpi::after{content:"";position:absolute;top:-40%;right:-30%;width:120px;height:120px;border-radius:50%;
+  background:radial-gradient(circle,rgba(42,120,214,.10),transparent 70%)}
+.kpi:hover{box-shadow:0 14px 30px -10px rgba(28,92,171,.35);border-color:var(--brand-200)}
+/* tarjetas con hover sutil */
+.card{transition:box-shadow .25s, border-color .25s}
+.card:hover{box-shadow:var(--shadow)}
+/* menú lateral: activo con barra degradada */
+.nav-item{position:relative}
+.nav-item.active::before{content:"";position:absolute;left:-14px;top:8px;bottom:8px;width:4px;border-radius:0 4px 4px 0;
+  background:linear-gradient(180deg,var(--red-400),var(--brand-400))}
+.sidebar .logo{border-bottom:1px solid var(--line);margin-bottom:6px}
+/* cabecera de dimensión de la encuesta con degradado corporativo */
+.dim-header{background:linear-gradient(120deg,rgba(42,120,214,.14),rgba(227,73,72,.06) 70%,transparent);border-left:4px solid var(--brand-400)}
+.progress-inner{background:linear-gradient(90deg,var(--red-400),var(--brand-400) 55%,var(--brand-600))}
+/* botón primario con destello al pasar */
+.btn-p{position:relative;overflow:hidden}
+.btn-p::after{content:"";position:absolute;top:0;left:-80%;width:50%;height:100%;transform:skewX(-25deg);
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);transition:left .5s}
+.btn-p:hover::after{left:130%}
+/* chips de campaña y "EN VIVO" con pulso */
+#liveChip{animation:pulse 2.4s infinite}
+/* barra de desplazamiento corporativa */
+::-webkit-scrollbar-thumb{background:linear-gradient(180deg,var(--brand-300),var(--brand-500));border-radius:9px}
+/* encabezados de tarjeta con ícono resaltado */
+.card-h{letter-spacing:-.01em}
+/* tablas: fila cebra sutil */
+.tbl tbody tr:nth-child(even){background:color-mix(in srgb, var(--surface-2) 55%, transparent)}
+.tbl tbody tr:hover{background:rgba(42,120,214,.07)}
 </style>
 <script>/* Chart.js v4.4.4 (MIT) */
 /*!
@@ -531,7 +578,8 @@ const pick = arr => arr[Math.floor(rnd()*arr.length)];
 /* ---------- CATÁLOGOS ---------- */
 const EMPRESAS = ['VERFRUT S.A.C.','RAPEL S.A.C.'];
 const SUPERVISORES = {
-  'Pool Tamayo Rodríguez':            {sectores:['Papayo','Limones','Administración']},
+  'Pool Tamayo Rodríguez':            {sectores:['Papayo','Limones']},
+  'Joel Ángel Timoteo Gonza':         {sectores:['Administración']},
   'Alexander Tineo Ramos': {sectores:['Olivares Bajo']},
   'Flor Pulache Viera':    {sectores:['Los Olivares']},
   'Alex Fabián Zapata Juárez':{sectores:['Aproa']},
@@ -539,7 +587,7 @@ const SUPERVISORES = {
   'Alexander Martínez Juárez':{sectores:['Punta Arenas']},
   'Sergio Viera Girón':    {sectores:['Algarrobos']},
   'Elbert Castro Bayona':  {sectores:['San Vicente']},
-  'Ermeco':                {sectores:['Planta Packing']},
+  'Roberto Molero Abad':   {sectores:['Planta Packing']},
 };
 /* perfil = sesgo de clima del sector para los datos demo (0-1) */
 const SECTORES = [
@@ -1149,8 +1197,12 @@ const TITULOS = {
 function render(){
   killCharts(); chartDefaults();
   const [t,c] = TITULOS[VIEW]||['SIGCL',''];
-  $('tbTitle').textContent=t; $('tbCrumb').textContent='SIGCL · '+c;
+  const navItem = NAV.find(x=>x.id===VIEW);
+  $('tbTitle').textContent = (navItem? navItem.ico+' ' : '')+t;
+  $('tbCrumb').textContent='SIGCL · '+c;
   buildNav();
+  /* transición de entrada entre módulos */
+  const vr=$('viewRoot'); vr.classList.remove('main-fade'); void vr.offsetWidth; vr.classList.add('main-fade');
   const R = {dashboard:vDashboard, gerencia:vGerencia, supervisor:vSupervisor, encuesta:vEncuestaApp,
     campanias:vCampanias, qr:vQR, planes:vPlanes, seguimiento:vSeguimiento, calendario:vCalendario,
     ia:vIA, alertas:vAlertas, reportes:vReportes, documentos:vDocumentos, usuarios:vUsuarios,
@@ -1475,7 +1527,7 @@ function renderSurvey(rootId, publico){
         <input id="svJefeOtro" placeholder="Nombres y apellidos del jefe / supervisor…">
       </div>
       <div class="mt16" style="background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:12.5px" id="svSupBox">
-        ${s.datos.sector? `👤 Supervisor GH responsable (automático): <b>${supervisorDe(s.datos.sector)}</b>` : '👤 El Supervisor GH responsable se asignará automáticamente al elegir el sector.'}
+        ${svSupBoxHTML(s)}
       </div>
       <div class="small muted mt8">📅 Fecha y hora: automáticas al enviar.</div>
     </div>
@@ -1519,6 +1571,43 @@ function renderSurvey(rootId, publico){
   root.innerHTML = inner;
   window.scrollTo({top:0,behavior:'smooth'});
 }
+/* quién ejecuta la encuesta: automático por sector, con opción de cambiarlo o escribirlo */
+function svSupBoxHTML(s){
+  if(!s.datos.sector) return '👤 El Supervisor GH responsable se asignará automáticamente al elegir el sector.';
+  const actual = s.datos.supervisor || supervisorDe(s.datos.sector);
+  return `👤 Aplica la encuesta: <b>${actual}</b>
+    <button class="btn btn-ghost btn-sm no-print" onclick="svSupEdit()" style="margin-left:6px">✏️ Cambiar</button>`;
+}
+function svSupEdit(){
+  const s = SURVEY;
+  const actual = s.datos.supervisor || supervisorDe(s.datos.sector);
+  $('svSupBox').innerHTML = `
+    <label>¿Quién ejecuta / acompaña esta encuesta?</label>
+    <div class="flex wrap">
+      <select id="svSupSel" style="max-width:260px" onchange="$('svSupOtroWrap').style.display=this.value==='__otro__'?'block':'none'">
+        ${Object.keys(SUPERVISORES).map(x=>`<option ${x===actual?'selected':''}>${x}</option>`).join('')}
+        <option value="__otro__">✏️ Otra persona (escribir)</option>
+      </select>
+      <button class="btn btn-o btn-sm" onclick="svSupSave()">✓ Aceptar</button>
+    </div>
+    <div id="svSupOtroWrap" style="display:none;margin-top:8px">
+      <input id="svSupOtro" placeholder="Nombre de quien ejecuta la encuesta…">
+    </div>`;
+}
+function svSupSave(){
+  const sel = $('svSupSel').value;
+  let sup = sel;
+  if(sel==='__otro__'){
+    const otro = ($('svSupOtro').value||'').trim();
+    if(otro.length<5) return toast('⚠️ Escriba el nombre de quien ejecuta la encuesta.','warn');
+    sup = otro.split(/\s+/).map(w=> w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(' ');
+    auditar('Registró ejecutor de encuesta manualmente','Encuestas', sup);
+  }
+  SURVEY.datos.supervisor = sup;
+  $('svSupBox').innerHTML = svSupBoxHTML(SURVEY);
+  toast('✅ Responsable de la encuesta: '+sup,'ok');
+}
+
 function svAreaSelectHTML(s){
   const esp = AREAS_ESPECIALES[s.datos.sector];
   const opts = esp ? [...esp, 'Otros'] : ['Campo','Packing / Oficina'];
@@ -1537,7 +1626,7 @@ function svSector(v){
   svCaptureStep0();
   SURVEY.datos.sector=v; SURVEY.datos.jefe=''; SURVEY.datos.areaSel=''; SURVEY.datos.areaOtro='';
   renderSurvey(SURVEY_ROOT, SURVEY_PUB); // re-dibuja área y jefes según el sector
-  setTimeout(()=>{ const b=$('svSupBox'); if(b) b.innerHTML = v? `👤 Supervisor GH responsable (automático): <b>${supervisorDe(v)}</b>` : '👤 Se asignará automáticamente.'; },30);
+  SURVEY.datos.supervisor='';
 }
 function svAreaChange(v){
   SURVEY.datos.areaSel=v;
@@ -1580,7 +1669,7 @@ function svNext(paso,rootId,publico){
       }
       toast('✅ Jefe/supervisor «'+jefe+'» registrado en el sistema.','ok');
     }
-    s.datos = {empresa:$('svEmp').value, sector:$('svSec').value, area, areaSel, areaOtro: areaSel==='Otros'? area:'', tiempo:$('svTiempo').value, tipo:$('svTipo').value, jefe};
+    s.datos = {empresa:$('svEmp').value, sector:$('svSec').value, area, areaSel, areaOtro: areaSel==='Otros'? area:'', tiempo:$('svTiempo').value, tipo:$('svTipo').value, jefe, supervisor: s.datos.supervisor||''};
     const falta = ['empresa','sector','area','tiempo','tipo','jefe'].filter(k=>!s.datos[k]);
     if(falta.length) return toast('⚠️ Complete todos los datos generales antes de continuar.','warn');
   } else {
@@ -1610,7 +1699,7 @@ function svSubmit(rootId,publico){
   const coment = s.abiertas.filter(x=>x.trim()).join(' | ');
   const reg = {
     id: DB.encuestas.length+1, campania:camp.id, empresa:s.datos.empresa, sector:s.datos.sector, area:s.datos.area,
-    supervisor: supervisorDe(s.datos.sector), jefe:s.datos.jefe, tiempo:s.datos.tiempo, tipo:s.datos.tipo,
+    supervisor: s.datos.supervisor || supervisorDe(s.datos.sector), jefe:s.datos.jefe, tiempo:s.datos.tiempo, tipo:s.datos.tipo,
     fecha:new Date().toISOString().slice(0,10), dur:Math.round((Date.now()-s.inicio)/1000),
     resp:s.resp, comentario:coment, tema: coment? detectarTema(coment) : null, abiertas:s.abiertas,
   };
