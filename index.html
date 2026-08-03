@@ -1443,7 +1443,9 @@ function vDashboard(){
     <div class="card span8"><div class="card-h">📈 Evolución del clima laboral</div><div class="card-sub">Histórico por campaña · todas las dimensiones</div><div class="chart-box"><canvas id="chLine"></canvas></div></div>
     <div class="card span12"><div class="card-h">🔥 Mapa de calor · Sector × Dimensión</div><div class="card-sub">Los valores muestran el índice porcentual; el color sigue el semáforo</div><div class="heat-wrap" id="heatRoot"></div></div>
     <div class="card span6"><div class="card-h">🏆 Ranking de sectores</div><div class="card-sub">Campaña actual · con tendencia vs anterior</div><div id="rankSect"></div></div>
-    <div class="card span6"><div class="card-h">🧭 Ranking de jefaturas (liderazgo)</div><div class="card-sub">Mínimo 5 evaluaciones</div><div id="rankJefes"></div></div>
+    <div class="card span6"><div class="card-h">🧭 Ranking de jefaturas (liderazgo)</div><div class="card-sub">Ordenado por índice de liderazgo · <b>n&lt;5</b> = resultado referencial (pocas evaluaciones)</div><div id="rankJefes"></div></div>
+    <div class="card span12"><div class="card-h">📋 Detalle por jefatura · todas las dimensiones</div><div class="card-sub">Resultados completos de cada jefe o supervisor evaluado: cantidad de evaluaciones, índice por dimensión, índice general y estado del semáforo</div><div class="heat-wrap" id="detJefes"></div></div>
+    <div class="card span12"><div class="card-h">👷 Encuestados por sector y tipo de trabajador</div><div class="card-sub">Cantidad de encuestas por tipo (obrero / empleado / practicante), avance frente al total de trabajadores del sector e índice de clima</div><div class="heat-wrap" id="detTipos"></div></div>
   </div>`;
 
   /* --- gráfico sectores (con % sobre cada barra y n encuestas en el tooltip) --- */
@@ -1507,13 +1509,46 @@ function vDashboard(){
       <td style="width:36%"><div class="flex"><div class="bar-track grow"><div class="bar-fill" style="width:${r.v}%;background:${semaforo(r.v).color}"></div></div><b class="num">${pct(r.v)}%</b></div></td>
       <td>${chipSem(r.v)}</td><td>${d==null?'—':`<span class="${d>=0?'delta-up':'delta-dn'}">${d>=0?'▲':'▼'} ${Math.abs(d)}</span>`}</td></tr>`}).join('')+'</tbody></table>';
 
-  const jefes=[]; Object.entries(JEFES).forEach(([sec,js])=>js.forEach(j=>{
-    const je = encFiltradas({jefe:j,sector:'',supervisor:'',tipo:'',empresa:''});
-    if(je.length>=5) jefes.push({j, sec, v:scoreDim(je,'lid'), n:je.length});
-  }));
-  jefes.sort((a,b)=>b.v-a.v);
-  $('rankJefes').innerHTML = `<table class="tbl"><thead><tr><th>#</th><th>Jefatura</th><th>Sector</th><th>Liderazgo</th><th>Evaluadores</th></tr></thead><tbody>`+
-    jefes.map((r,i)=>`<tr><td class="b">${i+1}</td><td>${r.j}</td><td class="muted">${r.sec}</td><td>${chipSem(r.v)}</td><td class="num">${r.n}</td></tr>`).join('')+'</tbody></table>';
+  /* ranking de jefaturas: se construye desde las encuestas reales (incluye jefes registrados manualmente) */
+  const porJefe = {};
+  encs.forEach(e=>{ if(!e.jefe) return; (porJefe[e.jefe] = porJefe[e.jefe] || []).push(e); });
+  const jefes = Object.entries(porJefe).map(([j,arr])=>({
+    j, sec:[...new Set(arr.map(e=>e.sector))].join(', '), v:scoreDim(arr,'lid'), n:arr.length, st:statsDe(arr)
+  })).sort((a,b)=>b.v-a.v);
+  $('rankJefes').innerHTML = jefes.length? `<table class="tbl"><thead><tr><th>#</th><th>Jefatura</th><th>Sector</th><th>Liderazgo</th><th>Evaluaciones</th></tr></thead><tbody>`+
+    jefes.map((r,i)=>`<tr><td class="b">${i+1}</td><td>${i===0?'🥇 ':i===1?'🥈 ':i===2?'🥉 ':''}${r.j}${r.n<5?' <span class="chip chip-neutral" title="Menos de 5 evaluaciones: resultado referencial">n&lt;5</span>':''}</td><td class="muted">${r.sec}</td><td>${chipSem(r.v)}</td><td class="num">${r.n}</td></tr>`).join('')+'</tbody></table>'
+    : '<p class="muted small mt8">Aún no hay jefaturas evaluadas en el filtro actual.</p>';
+
+  /* --- detalle por jefatura: todas las dimensiones --- */
+  const jd = Object.entries(porJefe).map(([j,arr])=>({
+    j, sec:[...new Set(arr.map(e=>e.sector))].join(', '), n:arr.length, st:statsDe(arr)
+  })).sort((a,b)=>b.st.clima-a.st.clima);
+  $('detJefes').innerHTML = jd.length? `<table class="tbl"><thead><tr><th>#</th><th>Jefatura evaluada</th><th>Sector</th><th>Evaluaciones</th>${DD.map(d=>`<th>${d.ico} ${d.nombre}</th>`).join('')}<th>Índice general</th><th>Estado</th></tr></thead><tbody>`+
+    jd.map((r,i)=>`<tr><td class="b">${i+1}</td><td class="b">${r.j}${r.n<5?' <span class="chip chip-neutral" title="Menos de 5 evaluaciones: resultado referencial">n&lt;5</span>':''}</td><td class="muted">${r.sec}</td><td class="num">${r.n.toLocaleString('es-PE')}</td>
+      ${DD.map(d=>{const v=r.st.dims[d.k];return `<td class="num" style="font-weight:700;color:${semaforo(v).color}" title="${d.nombre}: ${pct(v)}%">${pct(v)}%</td>`;}).join('')}
+      <td class="num b" style="font-size:14px">${pct(r.st.clima)}%</td><td>${chipSem(r.st.clima)}</td></tr>`).join('')+'</tbody></table>'
+    : '<p class="muted small mt8">Aún no hay jefaturas evaluadas en el filtro actual.</p>';
+
+  /* --- encuestados por sector y tipo de trabajador --- */
+  const porSec = {};
+  encs.forEach(e=>{ const k=e.sector||'—'; (porSec[k] = porSec[k] || []).push(e); });
+  const tRows = Object.entries(porSec).map(([secN,arr])=>{
+    const cnt = {}; TIPO_TRABAJADOR.forEach(t=> cnt[t] = arr.filter(e=>e.tipo===t).length);
+    const trab = (SECTORES.find(x=>x.n===secN)||{}).trabajadores || 0;
+    return {secN, cnt, total:arr.length, trab, avance: trab? Math.min(100, arr.length/trab*100):0, idx: statsDe(arr).clima};
+  }).sort((a,b)=>b.total-a.total);
+  const tTot = {}; TIPO_TRABAJADOR.forEach(t=> tTot[t] = tRows.reduce((a,r)=>a+r.cnt[t],0));
+  const gTotal = tRows.reduce((a,r)=>a+r.total,0), gTrab = tRows.reduce((a,r)=>a+r.trab,0);
+  const cell = (c,total)=> c? `<b>${c.toLocaleString('es-PE')}</b> <span class="muted small">(${pct(c/total*100)}%)</span>` : '<span class="muted">0</span>';
+  $('detTipos').innerHTML = tRows.length? `<table class="tbl"><thead><tr><th>Sector</th>${TIPO_TRABAJADOR.map(t=>`<th>${t==='Obrero'?'👷':t==='Empleado'?'💼':'🎓'} ${t}s</th>`).join('')}<th>Total encuestas</th><th>Trabajadores</th><th>Avance</th><th>Índice</th></tr></thead><tbody>`+
+    tRows.map(r=>`<tr><td class="b">${r.secN}</td>${TIPO_TRABAJADOR.map(t=>`<td class="num">${cell(r.cnt[t], r.total)}</td>`).join('')}
+      <td class="num b">${r.total.toLocaleString('es-PE')}</td><td class="num muted">${r.trab? r.trab.toLocaleString('es-PE'):'—'}</td>
+      <td style="width:16%"><div class="flex"><div class="bar-track grow"><div class="bar-fill" style="width:${r.avance}%"></div></div><span class="num small b">${pct(r.avance)}%</span></div></td>
+      <td>${chipSem(r.idx)}</td></tr>`).join('')+
+    `<tr style="border-top:2px solid var(--line)"><td class="b">TOTAL</td>${TIPO_TRABAJADOR.map(t=>`<td class="num b">${tTot[t].toLocaleString('es-PE')} <span class="muted small">(${gTotal? pct(tTot[t]/gTotal*100):0}%)</span></td>`).join('')}
+      <td class="num b">${gTotal.toLocaleString('es-PE')}</td><td class="num b">${gTrab.toLocaleString('es-PE')}</td>
+      <td class="num b">${gTrab? pct(Math.min(100,gTotal/gTrab*100)):0}%</td><td>${chipSem(statsDe(encs).clima)}</td></tr>`+
+    '</tbody></table>' : '<p class="muted small mt8">Aún no hay encuestas en el filtro actual.</p>';
 }
 function verSector(sec){ FILT.sector=sec; nav('ia'); }
 
@@ -1524,9 +1559,8 @@ function vGerencia(){
   const criticos = rank.filter(r=>r.v<70);
   const alerts = alertasInteligentes().slice(0,5);
   const planesAct = DB.planes.filter(p=>p.estado!=='Finalizado' && p.estado!=='Cancelado');
-  const jefes=[]; Object.entries(JEFES).forEach(([sec,js])=>js.forEach(j=>{
-    const je=encFiltradas({jefe:j,sector:'',supervisor:'',tipo:'',empresa:''}); if(je.length>=5) jefes.push({j,sec,v:scoreDim(je,'lid')});
-  })); jefes.sort((a,b)=>b.v-a.v);
+  const _pj={}; encFiltradas({sector:'',supervisor:'',jefe:'',tipo:'',empresa:''}).forEach(e=>{ if(e.jefe) (_pj[e.jefe]=_pj[e.jefe]||[]).push(e); });
+  const jefes = Object.entries(_pj).map(([j,arr])=>({j, sec:[...new Set(arr.map(e=>e.sector))].join(', '), v:scoreDim(arr,'lid')})).sort((a,b)=>b.v-a.v);
   $('viewRoot').innerHTML = `
   <h3 class="view-title">Panel Gerencial</h3>
   <div class="view-sub">Vista estratégica en una sola pantalla · solo visualización · ${CAMPANIAS.find(c=>c.id===FILT.campania).nombre}</div>
