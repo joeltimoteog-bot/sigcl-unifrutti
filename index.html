@@ -1605,9 +1605,19 @@ function vSupervisor(){
   });
   const tot = rows.reduce((a,r)=>a+r.total,0), totHoy = rows.reduce((a,r)=>a+r.hoy,0), totMeta = rows.reduce((a,r)=>a+r.meta,0);
   const dias = Math.max(0, Math.ceil((new Date(camp.cierre) - new Date())/86400000));
+  /* mensaje de cierre del día: fuera del horario de aplicación */
+  const _ah = new Date(), _dw = _ah.getDay();
+  const _finStr = _dw===6? ((CONFIG_ACCESO.horario.sab||{}).fin||'15:00') : ((CONFIG_ACCESO.horario.lv||{}).fin||'17:00');
+  const _fp = _finStr.split(':');
+  const _cerrado = _dw===0 || (_ah.getHours()*60+_ah.getMinutes()) >= ((+_fp[0])*60+(+_fp[1]));
   $('viewRoot').innerHTML = `
   <h3 class="view-title">🔢 Mi Contador de Encuestas</h3>
   <div class="view-sub">${SESSION.nombre} · Sectores: <b>${mis.join(', ')||'ninguno'}</b> · ${camp.nombre} (cierra ${camp.cierre} · faltan ${dias} días)</div>
+  ${_cerrado? `<div class="card mb16" style="border-left:4px solid var(--st-exc);max-width:760px">
+    <div class="flex"><div style="font-size:30px">🌙</div><div class="grow">
+      <b>Cerramos con las encuestas del día. ¡Gracias por su trabajo!</b>
+      <div class="small muted mt8">Hoy aplicó <b>${(mis.map(n=>DB.encuestas.filter(e=>e.campania===camp.id && e.sector===n && e.fecha===hoy).length).reduce((a,b)=>a+b,0)).toLocaleString('es-PE')}</b> encuesta(s). El resumen diario se envía automáticamente por correo a Gestión Humana al cierre de la jornada.</div>
+    </div></div></div>`:''}
   <div class="kpi-grid">
     <div class="kpi"><div class="k-accent" style="background:var(--brand-400)"></div><div class="k-name"><span>Encuestas hoy</span><span>📅</span></div><div class="k-val">${totHoy.toLocaleString('es-PE')}</div><div class="k-meta">aplicadas el día de hoy</div></div>
     <div class="kpi"><div class="k-accent" style="background:var(--s3)"></div><div class="k-name"><span>Total campaña</span><span>📝</span></div><div class="k-val">${tot.toLocaleString('es-PE')}</div><div class="k-meta">de ${totMeta.toLocaleString('es-PE')} (meta)</div></div>
