@@ -1099,19 +1099,103 @@ function forgotPw(){
   <div class="flex mt16" style="justify-content:flex-end"><button class="btn btn-o" onclick="closeModal()">Cancelar</button>
   <button class="btn btn-p" onclick="closeModal();toast('📧 Código de verificación enviado (simulado en el prototipo).','ok')">Enviar código</button></div>`);
 }
+/* =====================================================================
+   SEGURIDAD
+   · Contraseñas con hash SHA-256 + sal (nunca se guardan en texto plano)
+   · Bloqueo temporal: 5 intentos fallidos → 15 minutos
+   · Bloqueo administrativo (estado del usuario) verificado en el login
+   · Cierre de sesión automático por inactividad: 15 minutos
+   ===================================================================== */
+function sha256(ascii){
+  ascii = unescape(encodeURIComponent(String(ascii))); // UTF-8 (admite ñ, tildes)
+  function rr(v,a){ return (v>>>a) | (v<<(32-a)); }
+  var maxWord = Math.pow(2,32), result='', words=[], bitLen = ascii.length*8;
+  var hash = sha256.h = sha256.h || [], k = sha256.k = sha256.k || [];
+  var pc = k.length, isComp = {};
+  for(var cand=2; pc<64; cand++){
+    if(!isComp[cand]){
+      for(var i=0;i<313;i+=cand) isComp[i]=cand;
+      hash[pc] = (Math.pow(cand,.5)*maxWord)|0;
+      k[pc++]  = (Math.pow(cand,1/3)*maxWord)|0;
+    }
+  }
+  ascii += '\x80';
+  while(ascii.length%64 - 56) ascii += '\x00';
+  for(i=0;i<ascii.length;i++){
+    var j = ascii.charCodeAt(i);
+    if(j>>8) return '';
+    words[i>>2] |= j << ((3-i)%4)*8;
+  }
+  words[words.length] = ((bitLen/maxWord)|0);
+  words[words.length] = (bitLen);
+  for(j=0;j<words.length;){
+    var w = words.slice(j, j+=16), oldHash = hash.slice(0,8);
+    hash = hash.slice(0,8);
+    for(i=0;i<64;i++){
+      var w15=w[i-15], w2=w[i-2], a=hash[0], e=hash[4];
+      var t1 = hash[7] + (rr(e,6)^rr(e,11)^rr(e,25)) + ((e&hash[5])^((~e)&hash[6])) + k[i]
+        + (w[i] = (i<16)? w[i] : (w[i-16] + (rr(w15,7)^rr(w15,18)^(w15>>>3)) + w[i-7] + (rr(w2,17)^rr(w2,19)^(w2>>>10)))|0);
+      var t2 = (rr(a,2)^rr(a,13)^rr(a,22)) + ((a&hash[1])^(a&hash[2])^(hash[1]&hash[2]));
+      hash = [(t1+t2)|0].concat(hash);
+      hash[4] = (hash[4]+t1)|0;
+    }
+    for(i=0;i<8;i++) hash[i] = (hash[i]+oldHash[i])|0;
+  }
+  for(i=0;i<8;i++) for(j=3;j+1;j--){ var b=(hash[i]>>(j*8))&255; result += ((b<16)?0:'') + b.toString(16); }
+  return result;
+}
+function hashPass(p){ return sha256('sigcl#unifrutti#2026#' + p); }
+/* migración: el catálogo base pasa de texto plano a hash al cargar la aplicación */
+USUARIOS.forEach(function(u){ if(u.pass && !u.passH){ u.passH = hashPass(u.pass); delete u.pass; } });
+
+const INTENTOS_MAX = 5, BLOQUEO_MIN = 15, INACTIVIDAD_MIN = 15;
+function _intentos(){ try{ return JSON.parse(localStorage.getItem('sigcl_intentos')||'{}'); }catch(e){ return {}; } }
+function _setIntentos(o){ try{ localStorage.setItem('sigcl_intentos', JSON.stringify(o)); }catch(e){} }
+function bloqueoIntentos(user){
+  const it = _intentos()[user];
+  if(it && it.hasta && Date.now() < it.hasta) return Math.ceil((it.hasta - Date.now())/60000);
+  return 0;
+}
+function registrarFallo(user){
+  const o = _intentos(); const it = o[user] || {n:0};
+  it.n++;
+  if(it.n >= INTENTOS_MAX){
+    it.hasta = Date.now() + BLOQUEO_MIN*60000; it.n = 0;
+    auditar('Cuenta bloqueada por intentos fallidos','Seguridad', user + ' · ' + BLOQUEO_MIN + ' minutos');
+  } else {
+    auditar('Intento de acceso fallido','Seguridad', user + ' · intento ' + it.n + ' de ' + INTENTOS_MAX);
+  }
+  o[user] = it; _setIntentos(o);
+  return it.hasta ? -1 : (INTENTOS_MAX - it.n);
+}
+function limpiarFallos(user){ const o = _intentos(); delete o[user]; _setIntentos(o); }
+
 function doLogin(){
   const u=$('lgUser').value.trim().toLowerCase(), p=$('lgPass').value;
   const usr = USUARIOS.find(x=>x.user===u);
-  if(!usr || (usr.pass!==p)){
-    $('lgError').textContent='Usuario o contraseña incorrectos. Tras 5 intentos fallidos la cuenta se bloquea 15 minutos.';
-    return;
+  const err = m => { $('lgError').textContent = m; };
+  if(usr){
+    const min = bloqueoIntentos(u);
+    if(min) return err('🔒 Cuenta bloqueada temporalmente por intentos fallidos. Intente nuevamente en '+min+' minuto(s).');
+    if(usr.estado==='Bloqueado') return err('⛔ Cuenta bloqueada por el administrador. Comuníquese con Relaciones Laborales.');
   }
+  if(!usr || usr.passH !== hashPass(p)){
+    if(usr){
+      const rest = registrarFallo(u);
+      return err(rest===-1
+        ? '🔒 Cuenta bloqueada por '+BLOQUEO_MIN+' minutos tras '+INTENTOS_MAX+' intentos fallidos. El evento quedó en la bitácora.'
+        : 'Usuario o contraseña incorrectos. Le queda(n) '+rest+' intento(s) antes del bloqueo temporal.');
+    }
+    return err('Usuario o contraseña incorrectos.');
+  }
+  limpiarFallos(u);
   const acc = estadoAcceso(usr.user);
   if(!acc.ok && !window._skipAcc){ mostrarBloqueo(acc, usr); return; }
   iniciarSesion(usr);
 }
 function loginAs(u){
   const usr = USUARIOS.find(x=>x.user===u);
+  if(usr.estado==='Bloqueado') return toast('⛔ Cuenta bloqueada por el administrador.','err');
   const acc = estadoAcceso(usr.user);
   if(!acc.ok && !window._skipAcc){ mostrarBloqueo(acc, usr); return; }
   iniciarSesion(usr);
@@ -1148,7 +1232,9 @@ function cambiarPass(){
   const fuerte = a.length>=8 && /[A-Z]/.test(a) && /[a-z]/.test(a) && /\d/.test(a);
   if(a!==b) return toast('Las contraseñas no coinciden.','err');
   if(!fuerte) return toast('La contraseña no cumple la política de seguridad (mínimo 8 caracteres, con mayúscula, minúscula y número).','err');
-  SESSION.pass=a; SESSION.debeCambiar=false; if(typeof upsertUsuarioPersistente==='function') upsertUsuarioPersistente(SESSION.user, {pass:a}); closeModal();
+  SESSION.passH=hashPass(a); delete SESSION.pass; SESSION.debeCambiar=false;
+  if(typeof upsertUsuarioPersistente==='function') upsertUsuarioPersistente(SESSION.user, {passH:SESSION.passH, debeCambiar:false});
+  closeModal();
   auditar('Cambio de contraseña','Seguridad','Política cumplida');
   toast('✅ Contraseña actualizada correctamente.','ok');
 }
@@ -1156,6 +1242,18 @@ function logout(){
   auditar('Cierre de sesión','Autenticación','');
   SESSION=null; go('landing'); initLandingStats();
 }
+/* cierre de sesión automático por inactividad */
+let _ultActividad = Date.now();
+['click','keydown','touchstart','mousemove','scroll'].forEach(function(ev){
+  document.addEventListener(ev, function(){ _ultActividad = Date.now(); }, {passive:true});
+});
+setInterval(function(){
+  if(SESSION && Date.now() - _ultActividad > INACTIVIDAD_MIN*60000){
+    auditar('Cierre de sesión por inactividad','Seguridad', INACTIVIDAD_MIN + ' minutos sin actividad');
+    SESSION = null; go('login');
+    toast('🕒 Por seguridad, su sesión se cerró tras '+INACTIVIDAD_MIN+' minutos de inactividad. Vuelva a ingresar.','warn');
+  }
+}, 30000);
 
 /* ---------- NAVEGACIÓN POR ROL ----------
    Matriz definida por el Coordinador de RR.LL.:
@@ -2537,7 +2635,8 @@ function baseEncuestasHTML(){
       ${esSA? `<td><button class="btn btn-ghost btn-sm" title="Eliminar esta encuesta de la base" onclick="eliminarEncuesta(${e.id})">🗑</button></td>`:''}</tr>`;
     }).join('')}
     </tbody></table></div>
-    ${esSA? `<div class="small muted mt8">🗑 La eliminación es definitiva: borra la encuesta ${window.PROD && !window.PROD_DEMO ? 'de la hoja de Google Sheets ' : ''}y recalcula todos los indicadores. Se registra en la bitácora de auditoría.</div>`:''}
+    ${esSA? `<div class="small muted mt8">🗑 La eliminación es definitiva: borra la encuesta ${window.PROD && !window.PROD_DEMO ? 'de la hoja de Google Sheets ' : ''}y recalcula todos los indicadores. Se registra en la bitácora de auditoría.</div>`
+          : `<div class="small muted mt8">ℹ️ La eliminación de encuestas es exclusiva del Super Administrador (jtimoteo).</div>`}
   </div>`;
 }
 function eliminarEncuesta(id){
@@ -2589,7 +2688,7 @@ function vReportes(){
     $('viewRoot').innerHTML = `<div class="card" style="text-align:center;padding:50px 24px;max-width:640px">
       <div style="font-size:46px;margin-bottom:8px">📭</div>
       <b style="font-size:16px">Aún no hay encuestas en la campaña seleccionada</b>
-      <p class="muted small" style="margin:8px 0 18px">El reporte ejecutivo se generará automáticamente cuando existan respuestas registradas.</p>
+      <p class="muted small" style="margin:8px 0 18px">El reporte ejecutivo se generará automáticamente cuando existan respuestas registradas.${window.PROD && !window.PROD_DEMO? ' Si acaba de registrar encuestas, presione el botón <b>🔄</b> de la barra superior para releer la base.':''}</p>
       <button class="btn btn-p btn-sm" onclick="nav('qr')">🔳 Ver códigos QR</button></div>
       <div class="mt16">${baseEncuestasHTML()}</div>`;
     return;
@@ -2768,21 +2867,22 @@ function nuevoUsuario(){
 }
 function crearUsuario(){
   const u=$('nuUser').value.trim()||'nuevo';
-  USUARIOS.push({user:u, nombre:($('nuNombres').value+' '+$('nuApellidos').value).trim()||u, rol:$('nuRol').value, cargo:$('nuRol').value, correo:u+'@unifrutti.com', estado:'Activo', ultimo:'—', ip:'—', disp:'—', pass:$('nuPass').value});
+  const np=$('nuPass').value;
+  USUARIOS.push({user:u, nombre:($('nuNombres').value+' '+$('nuApellidos').value).trim()||u, rol:$('nuRol').value, cargo:$('nuRol').value, correo:u+'@unifrutti.com', estado:'Activo', ultimo:'—', ip:'—', disp:'—', passH:hashPass(np)});
   upsertUsuarioPersistente(u, {});  // queda guardado: ingresa directo desde cualquier dispositivo
   auditar('Creó usuario','Usuarios','Usuario '+u+' · rol '+$('nuRol').value);
   closeModal(); render();
   modal(`<h3>✅ Usuario creado</h3><p class="muted small" style="margin:8px 0 12px">Entregue estas credenciales. El usuario ingresa directamente con ellas.</p>
   <table class="tbl"><tr><td class="muted">Usuario</td><td class="b">${u}</td></tr>
-  <tr><td class="muted">Contraseña</td><td class="b" style="font-family:monospace">${USUARIOS.find(x=>x.user===u).pass}</td></tr>
+  <tr><td class="muted">Contraseña</td><td class="b" style="font-family:monospace">${np}</td></tr>
   <tr><td class="muted">Rol</td><td>${USUARIOS.find(x=>x.user===u).rol}</td></tr></table>
   <div class="flex mt16" style="justify-content:flex-end"><button class="btn btn-p" onclick="closeModal()">Entendido</button></div>`);
 }
 function resetPass(user){
   const u = USUARIOS.find(x=>x.user===user); if(!u) return;
   const np = genPass();
-  u.pass = np;
-  upsertUsuarioPersistente(user, {pass:np});
+  u.passH = hashPass(np); delete u.pass;
+  upsertUsuarioPersistente(user, {passH:u.passH});
   auditar('Restableció contraseña','Usuarios', user);
   modal(`<h3>🔑 Contraseña restablecida</h3><p class="muted small" style="margin:8px 0 12px">Entregue la nueva credencial a <b>${u.nombre}</b>. Ingresa directamente con ella.</p>
   <table class="tbl"><tr><td class="muted">Usuario</td><td class="b">${user}</td></tr><tr><td class="muted">Nueva contraseña</td><td class="b" style="font-family:monospace">${np}</td></tr></table>
@@ -2881,6 +2981,18 @@ function vSysadmin(){
       <tr><td>Dashboard</td><td class="num b">1.6 s</td></tr>
       <tr><td>Respuesta API</td><td class="num b">210 ms</td></tr>
       <tr><td>Usuarios concurrentes</td><td class="num b">37 / 100</td></tr></table></div>
+    <div class="card span12"><div class="card-h">🛡️ Políticas de seguridad activas</div><div class="card-sub">Aplicadas en esta versión del sistema — verificables en la bitácora de auditoría</div>
+      <table class="tbl"><thead><tr><th>Política</th><th>Detalle</th><th>Estado</th></tr></thead><tbody>
+      <tr><td class="b">🔑 Contraseñas con hash SHA-256 + sal</td><td>Las contraseñas nunca se guardan ni sincronizan en texto plano; solo viaja y se almacena su huella criptográfica.</td><td><span class="chip chip-exc">● Activa</span></td></tr>
+      <tr><td class="b">🔒 Bloqueo por intentos fallidos</td><td>5 intentos incorrectos bloquean la cuenta por 15 minutos; cada intento queda en la bitácora.</td><td><span class="chip chip-exc">● Activa</span></td></tr>
+      <tr><td class="b">🕒 Cierre por inactividad</td><td>La sesión se cierra automáticamente tras 15 minutos sin actividad.</td><td><span class="chip chip-exc">● Activa</span></td></tr>
+      <tr><td class="b">🧱 Política de contraseñas</td><td>Mínimo 8 caracteres con mayúscula, minúscula y número; cambio obligatorio en el primer ingreso.</td><td><span class="chip chip-exc">● Activa</span></td></tr>
+      <tr><td class="b">⛔ Bloqueo administrativo</td><td>Un usuario con estado «Bloqueado» no puede iniciar sesión aunque conozca su contraseña.</td><td><span class="chip chip-exc">● Activa</span></td></tr>
+      <tr><td class="b">⏰ Control de horario y feriados</td><td>Ingreso L–V 06:15–17:00, sáb. 06:15–15:00; domingos y feriados bloqueados con solicitud de acceso.</td><td><span class="chip chip-exc">● Activa</span></td></tr>
+      <tr><td class="b">🎭 Roles y permisos por módulo</td><td>Cada rol ve solo sus módulos; accesos adicionales únicamente con aprobación del Super Administrador.</td><td><span class="chip chip-exc">● Activa</span></td></tr>
+      <tr><td class="b">🔳 Encuesta pública aislada</td><td>El QR solo abre la encuesta anónima; al terminar se cierra sin acceso al resto del sistema.</td><td><span class="chip chip-exc">● Activa</span></td></tr>
+      <tr><td class="b">🧾 Auditoría completa</td><td>Inicios de sesión, fallos, bloqueos, eliminaciones y cambios quedan registrados con usuario, fecha y detalle.</td><td><span class="chip chip-exc">● Activa</span></td></tr>
+      </tbody></table></div>
     <div class="card span6"><div class="card-h">🔔 Notificaciones al propietario</div>
       ${[['🔒','Usuario bloqueado por 5 intentos fallidos','usuario: prueba01 · IP 181.65.x.x · hoy 06:12'],
          ['💾','Backup diario completado','Base_Clima_Laboral · hoy 02:00'],
@@ -3073,6 +3185,8 @@ const CONFIG_ACCESO = {
 function sincronizarUsuarios(){
   (CONFIG_ACCESO.usuarios||[]).forEach(function(cu){
     if(!cu || !cu.user || cu.user==='jtimoteo' && cu.rol!=='Super Administrador') return;
+    /* seguridad: migra contraseñas antiguas en texto plano a hash SHA-256 */
+    if(cu.pass && !cu.passH && typeof hashPass==='function'){ cu.passH = hashPass(cu.pass); delete cu.pass; }
     const ex = USUARIOS.find(u=>u.user===cu.user);
     if(ex) Object.assign(ex, cu);
     else USUARIOS.push(Object.assign({}, cu));
@@ -3085,7 +3199,7 @@ function upsertUsuarioPersistente(user, cambios){
   if(!e){
     const b = USUARIOS.find(u=>u.user===user) || {user};
     e = {user:b.user, nombre:b.nombre||user, rol:b.rol||'Consulta', cargo:b.cargo||'', correo:b.correo||'',
-         estado:b.estado||'Activo', sectores:b.sectores, pass:b.pass, ultimo:b.ultimo||'—', ip:b.ip||'—', disp:b.disp||'—'};
+         estado:b.estado||'Activo', sectores:b.sectores, passH:b.passH, ultimo:b.ultimo||'—', ip:b.ip||'—', disp:b.disp||'—'};
     CONFIG_ACCESO.usuarios.push(e);
   }
   Object.assign(e, cambios||{});
