@@ -1604,23 +1604,34 @@ function nuevoSurvey(){
   return {paso:0, datos:{empresa:'',sector:'',area:'',tiempo:'',tipo:'',jefe:''}, resp:{}, abiertas:['','',''], inicio:Date.now()};
 }
 function startSurveyPublic(){
-  const acc = estadoAcceso(null);
-  if(!acc.ok && !window._skipAcc){
-    go('publicSurvey');
-    $('surveyRoot').innerHTML = `
-    <div class="q-card" style="text-align:center;padding:46px 26px;max-width:520px;margin:8vh auto">
-      <div class="logo" style="justify-content:center;margin-bottom:18px"><div class="logo-mark" role="img" aria-label="Unifrutti"></div><div>SIGCL<small>UNIFRUTTI PERÚ</small></div></div>
-      <div style="font-size:54px;margin-bottom:8px">${acc.ico}</div>
-      <h3 style="font-size:19px;margin-bottom:8px">${acc.tipo}</h3>
-      <p style="color:var(--ink-2);max-width:400px;margin:0 auto 20px">${acc.msg}</p>
-      <div class="flex" style="justify-content:center;flex-wrap:wrap">
-        <button class="btn btn-o" onclick="go('landing')">← Volver</button>
-        ${!window.PROD? `<button class="btn btn-ghost btn-sm" onclick="window._skipAcc=true;startSurveyPublic()">Continuar (demostración)</button>`:''}
-      </div>
-    </div>`;
+  /* El trabajador entra SIEMPRE directo (el QR controla su propia vigencia por campaña).
+     El horario de ingreso aplica solo al login de usuarios del sistema. */
+  go('publicSurvey');
+  const camp = CAMPANIAS.find(c=>c.estado==='Activa');
+  if(!camp){
+    $('surveyRoot').innerHTML = `<div class="q-card" style="text-align:center;padding:46px 26px;max-width:520px;margin:8vh auto">
+      <div style="font-size:50px;margin-bottom:8px">📭</div>
+      <h3 style="font-size:19px;margin-bottom:8px">No hay campañas activas</h3>
+      <p style="color:var(--ink-2)">Por el momento no hay encuestas disponibles. ¡Gracias por su interés!</p></div>`;
     return;
   }
-  SURVEY=nuevoSurvey(); go('publicSurvey'); renderSurvey('surveyRoot', true);
+  /* pantalla de bienvenida para el colaborador */
+  $('surveyRoot').innerHTML = `
+  <div class="q-card" style="text-align:center;padding:40px 26px;max-width:560px;margin:5vh auto">
+    <div class="logo" style="justify-content:center;margin-bottom:16px"><div class="logo-mark" role="img" aria-label="Unifrutti"></div><div>SIGCL<small>UNIFRUTTI PERÚ</small></div></div>
+    <div style="font-size:50px;margin-bottom:6px">👋</div>
+    <h3 style="font-size:22px;margin-bottom:6px;font-family:var(--font-display)">¡Bienvenido(a)!</h3>
+    <p style="color:var(--ink-2);max-width:440px;margin:0 auto 18px">Este es el <b>Sistema Inteligente de Clima Laboral</b> de UNIFRUTTI. Aquí podrá responder la encuesta de manera <b>100% anónima</b>: su opinión nos ayuda a construir un mejor lugar para trabajar.</p>
+    <div style="text-align:left;max-width:380px;margin:0 auto 22px;font-size:13.5px;color:var(--ink-2);line-height:2.1">
+      <div>🔒 &nbsp;<b>Anónima:</b> no pedimos nombre, DNI ni firma</div>
+      <div>⏱️ &nbsp;<b>Rápida:</b> menos de 3 minutos desde su celular</div>
+      <div>💬 &nbsp;<b>Sincera:</b> responda con total confianza y honestidad</div>
+      <div>🚩 &nbsp;<b>Campaña:</b> ${camp.nombre}</div>
+    </div>
+    <button class="btn gx-entrar gx-cta" style="font-size:15px" onclick="SURVEY=nuevoSurvey();renderSurvey('surveyRoot', true)">✅ COMENZAR ENCUESTA</button>
+    <div class="small muted mt16">Sus respuestas se tratan con confidencialidad y se usan únicamente con fines de mejora organizacional.</div>
+  </div>`;
+  window.scrollTo(0,0);
 }
 function vEncuestaApp(){
   $('viewRoot').innerHTML = `<div class="survey-shell" id="surveyRootApp"></div>`;
@@ -2801,6 +2812,9 @@ function responderIA(q){
 document.addEventListener('DOMContentLoaded', ()=>{
   initLandingStats();
   initCarrusel('#landing');
+  // acceso directo del QR a la encuesta (?e=1), funcione o no la API
+  const qp = new URLSearchParams(location.search);
+  if(qp.get('e')) setTimeout(()=>startSurveyPublic(), 80);
 });
 </script>
 </body>
