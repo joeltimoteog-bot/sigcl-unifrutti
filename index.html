@@ -804,6 +804,7 @@ const DIMENSIONES = [
     'Me siento cómodo trabajando aquí.','Recomendaría trabajar en esta empresa.','Me siento comprometido.',
     'Existe un buen ambiente.','Estoy satisfecho con mi trabajo.']},
 ];
+const DIMS_BASE = JSON.parse(JSON.stringify(DIMENSIONES)); // v3.2 — modelo base (25 preguntas) para nuevas encuestas
 const LIKERT = [
   {v:1, txt:'Totalmente en desacuerdo', ico:'😞', color:'var(--st-cri)'},
   {v:2, txt:'En desacuerdo',            ico:'🙁', color:'var(--st-reg)'},
@@ -2100,6 +2101,7 @@ function svSubmit(rootId,publico){
     supervisor: s.datos.supervisor || supervisorDe(s.datos.sector), jefe:s.datos.jefe, tiempo:s.datos.tiempo, tipo:s.datos.tipo,
     fecha:new Date().toISOString().slice(0,10), dur:Math.round((Date.now()-s.inicio)/1000),
     resp:s.resp, comentario:coment, tema: coment? detectarTema(coment) : null, abiertas:s.abiertas,
+    uid: nuevoUid(), instrumento: (function(){ const i=instrumentoActivo(); return i? i.id+' · '+i.nombre : ''; })(),
   };
   DB.encuestas.push(reg);
   auditar('Encuesta registrada','Encuestas',`${s.datos.sector} · ${camp.nombre} · anónima`);
@@ -2213,7 +2215,7 @@ function rebuildQRS(){
 }
 /* persiste la lista de campañas (localStorage + hoja Config en producción) */
 function syncCampanias(){
-  CONFIG_ACCESO.campanias = CAMPANIAS.map(c=>({id:c.id, nombre:c.nombre, inicio:c.inicio, cierre:c.cierre, estado:c.estado, meta:c.meta, resp:c.resp}));
+  CONFIG_ACCESO.campanias = CAMPANIAS.map(c=>({id:c.id, nombre:c.nombre, inicio:c.inicio, cierre:c.cierre, estado:c.estado, meta:c.meta, resp:c.resp, periodo:c.periodo||'', instrumento:c.instrumento||''}));
   guardarAcceso();
 }
 function activarCampania(id){
@@ -2223,6 +2225,8 @@ function activarCampania(id){
     else if(c.estado==='Activa') c.estado='Cerrada';
   });
   FILT.campania = id;
+  const cA = CAMPANIAS.find(x=>x.id===id); // v3.2 — al activar un periodo se aplican sus propias preguntas
+  if(cA && cA.instrumento && typeof activarInstrumentoSilencioso==='function') activarInstrumentoSilencioso(cA.instrumento);
   rebuildQRS(); syncCampanias();
   auditar('Activó campaña','Campañas', id);
   render(); toast('✅ Campaña activada. Su QR ya está disponible en el módulo Códigos QR.','ok');
@@ -2568,10 +2572,13 @@ function vPreguntas(){
     <div><h3 class="view-title">Preguntas y Encuestas</h3>
     <div class="view-sub">${INSTRUMENTOS.length} módulo(s) de encuesta · editando: <b>${ICONO_TIPO[act.tipo]||'⭐'} ${act.nombre}</b> (${DIMENSIONES.length} dimensiones · ${tot} preguntas) · <b>solo el creador del sistema y los administradores autorizados por él programan las encuestas</b></div></div>
     <div class="flex wrap no-print">
+      <button class="btn btn-p btn-sm" style="background:linear-gradient(135deg,#e11d2e,#b3121f)" onclick="nuevaEncuestaPeriodo()">🆕 Nueva encuesta</button>
       <button class="btn btn-o btn-sm" onclick="nav('encuesta')">👁 Vista previa de la encuesta</button>
       <button class="btn btn-p btn-sm" onclick="qNuevaDim()">＋ Nueva dimensión</button>
     </div>
   </div>
+
+  ${historialEncuestasHTML()}
 
   <div class="card mb16" style="border-left:4px solid var(--acc-500,#e11d2e)">
     <div class="flex between wrap">
@@ -2825,7 +2832,7 @@ function confirmarEliminarEncuesta(id){
   auditar('Eliminó encuesta de la base','Resultados', `${reg.fecha} · ${reg.sector} · ${reg.jefe}`);
   if(window.PROD && !window.PROD_DEMO && reg.fila){
     toast('🗑 Eliminando de la «Base de Clima Laboral»…');
-    apiGuardar(JSON.stringify({tipo:'eliminar', fila:reg.fila}), function(r){
+    apiGuardar(JSON.stringify({tipo:'eliminar', id:reg.uid||'', fila:reg.fila, fecha:reg.fecha, sector:reg.sector}), function(r){
       if(r && r.ok){
         toast('✅ Encuesta eliminada de la base. Quedan '+(r.total!=null? r.total:'—')+' registro(s).','ok');
         actualizarDatos(false, function(){ render(); }); // relee la hoja para renumerar filas
@@ -3386,6 +3393,7 @@ function upsertUsuarioPersistente(user, cambios){
   }catch(e){}
 })();
 function guardarAcceso(){
+  window.__cfgLocalTs = Date.now(); // v3.2
   try{ localStorage.setItem('sigcl_acceso', JSON.stringify(CONFIG_ACCESO)); }catch(e){}
   if(window.PROD && typeof apiConfigPush==='function') apiConfigPush();
 }
@@ -3397,6 +3405,9 @@ function aplicarConfigRemota(str){
     sincronizarUsuarios();
     aplicarCampaniasCfg(c.campanias);
     aplicarInstrumentosCfg(c.instrumentos);
+    /* v3.2 — foto de lo recibido: al guardar solo se envían las claves que este equipo cambió */
+    window.__CFG_SNAP = window.__CFG_SNAP || {};
+    Object.keys(c).forEach(function(k){ window.__CFG_SNAP[k] = JSON.stringify(c[k]); });
     try{ localStorage.setItem('sigcl_acceso', JSON.stringify(CONFIG_ACCESO)); }catch(e){}
   }catch(e){}
 }
@@ -3645,9 +3656,11 @@ function initProd(){
     DB.encuestas.length = 0; // producción: solo datos reales
     try{ initLandingStats(); }catch(e){}
   }
+  if(boot.modo==='encuesta'){ iniciarEncuestaQR(); return; } // v3.2
   apiObtener(function(r){
     try{
       if(API_MODE==='gas' && r && r.url) window.APP_URL = r.url;
+      if(r && r.ver != null) window.__VER = r.ver;
       if(r && r.config) aplicarConfigRemota(r.config); // horarios, feriados, permisos y solicitudes compartidos
       if(!modoDemo && r && Array.isArray(r.filas)){
         DB.encuestas.length = 0;
@@ -3661,8 +3674,6 @@ function initProd(){
   }, function(e){
     toast('⚠️ No se pudo conectar con la base de datos: '+ (e && e.message ? e.message : e),'err');
   });
-
-  if(boot.modo==='encuesta'){ startSurveyPublic(); }
 }
 document.addEventListener('DOMContentLoaded', function(){ setTimeout(initProd, 250); });
 
@@ -3679,13 +3690,16 @@ function actualizarDatos(manual, done){
   if(manual) toast('🔄 Consultando la «Base de Clima Laboral»…');
   apiObtener(function(r){
     try{
-      if(r && r.config) aplicarConfigRemota(r.config);
+      if(r && r.ver != null) window.__VER = r.ver;
+      if(r && r.config && (Date.now() - (window.__cfgLocalTs||0) > 20000)) aplicarConfigRemota(r.config);
       if(r && Array.isArray(r.filas)){
         DB.encuestas.length = 0;
         r.filas.forEach(function(f,i){ const reg = prodParseFila(f,i); if(reg) DB.encuestas.push(reg); });
         try{ initLandingStats(); }catch(e){}
-        /* no re-dibujar si hay una encuesta en curso dentro de la app */
-        if(SESSION && VIEW!=='encuesta') render();
+        /* no re-dibujar si hay una encuesta en curso dentro de la app, ni mientras el usuario escribe */
+        const ae = document.activeElement;
+        const escribiendo = ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) && !(ae.closest && ae.closest('#modalRoot,.modal'));
+        if(SESSION && VIEW!=='encuesta' && !(manual!==true && escribiendo)) render();
       }
       if(manual) toast('✅ Indicadores actualizados: '+DB.encuestas.length+' encuesta(s) en la base.','ok');
       if(typeof done==='function') done(r);
@@ -3694,9 +3708,52 @@ function actualizarDatos(manual, done){
     if(manual) toast('⚠️ No se pudo conectar con la base de datos. Verifique su conexión.','err');
   });
 }
-setInterval(function(){
-  if(window.PROD && !window.PROD_DEMO && SESSION && VIEW!=='encuesta' && !document.hidden) actualizarDatos(false);
-}, 90000);
+/* v3.2 — VISUALIZACIÓN INMEDIATA: cada 10 s se consulta solo la «versión» de la base (respuesta
+   de pocos bytes). Si entró una encuesta nueva, se leen los datos y se avisa al administrador.
+   Con el Code.gs anterior (sin api=ver) se mantiene la lectura completa cada 90 s. */
+window.__VER = null; window.__verOK = null; window.__ultSync = Date.now();
+function sondeoVivo(){
+  if(!window.PROD || window.PROD_DEMO || !SESSION || document.hidden) return;
+  if(VIEW==='encuesta' && SURVEY && !SURVEY.done && SURVEY.paso>0) return; // no interrumpir una encuesta en curso
+  if(window.__verOK===false){
+    if(Date.now()-window.__ultSync >= 90000){ window.__ultSync = Date.now(); actualizarDatos(false); }
+    return;
+  }
+  apiVersion(function(r){
+    if(!r || r.ver==null){ window.__verOK = false; return; }
+    window.__verOK = true; marcarVivo(true);
+    if(window.__VER===null){ window.__VER = r.ver; return; }
+    if(String(r.ver)!==String(window.__VER)){
+      const antes = DB.encuestas.length;
+      window.__VER = r.ver;
+      actualizarDatos(false, function(){
+        const nuevas = DB.encuestas.length - antes;
+        if(nuevas>0){
+          let u = {}; try{ u = JSON.parse(r.ultimo||'{}'); }catch(e){}
+          toast('📥 '+(nuevas===1? 'Nueva encuesta recibida' : nuevas+' encuestas nuevas')+(u.sector? ' · '+u.sector : '')+(u.hora? ' · '+u.hora.slice(0,5) : '')+' — indicadores actualizados.','ok');
+        }
+      });
+    }
+  }, function(){ marcarVivo(false); });
+  prodReintentarPendientes();
+}
+setInterval(sondeoVivo, 10000);
+window.addEventListener('online', function(){ try{ prodReintentarPendientes(); sondeoVivo(); }catch(e){} });
+document.addEventListener('visibilitychange', function(){ if(!document.hidden) try{ sondeoVivo(); }catch(e){} });
+function marcarVivo(ok){
+  const c = document.getElementById('liveChip'); if(!c) return;
+  c.textContent = ok ? '● EN VIVO' : '○ SIN CONEXIÓN';
+  c.style.opacity = ok ? '' : '.6';
+  c.title = (ok? 'Conectado · última verificación ' : 'Sin conexión · último intento ') + new Date().toLocaleTimeString('es-PE');
+}
+function apiVersion(ok, err){
+  if(API_MODE==='gas'){
+    google.script.run.withSuccessHandler(ok).withFailureHandler(function(){ ok(null); }).obtenerVersion();
+  } else {
+    fetch(SIGCL_API_URL + '?api=ver', {method:'GET'}).then(function(r){ return r.text(); })
+      .then(function(t){ let j=null; try{ j=JSON.parse(t); }catch(e){} ok(j); }).catch(err);
+  }
+}
 
 /* ---------- capa de API unificada ---------- */
 function apiObtener(ok, err){
@@ -3718,8 +3775,19 @@ function apiGuardar(payloadJson, ok, err){
 
 /* sube la configuración de acceso (horario/feriados/permisos/solicitudes) a la hoja Config */
 function apiConfigPush(){
-  const body = JSON.stringify({tipo:'config', config: JSON.stringify(CONFIG_ACCESO)});
-  apiGuardar(body, function(){}, function(){ /* reintento en el próximo guardado */ });
+  if(window.__CFG_PUBLICO) return; // el celular del trabajador (QR) nunca modifica la configuración
+  /* v3.2 — solo se envían las claves que cambiaron en este equipo; el servidor las fusiona.
+     Así un equipo con datos antiguos no borra preguntas/campañas creadas desde otro. */
+  const snap = window.__CFG_SNAP, parcial = {};
+  Object.keys(CONFIG_ACCESO).forEach(function(k){
+    const j = JSON.stringify(CONFIG_ACCESO[k]);
+    if(!snap || snap[k]!==j) parcial[k] = CONFIG_ACCESO[k];
+  });
+  if(snap && !Object.keys(parcial).length) return;
+  const body = JSON.stringify({tipo:'config', config: JSON.stringify(CONFIG_ACCESO), parcial: parcial});
+  apiGuardar(body, function(r){
+    if(r && r.ok){ window.__CFG_SNAP = window.__CFG_SNAP || {}; Object.keys(parcial).forEach(function(k){ window.__CFG_SNAP[k] = JSON.stringify(parcial[k]); }); }
+  }, function(){ /* reintento en el próximo guardado */ });
 }
 
 function prodParseFila(f,i){
@@ -3730,6 +3798,7 @@ function prodParseFila(f,i){
       fecha:f.fecha||'', dur:+f.dur||0,
       resp: (typeof f.resp==='string' && f.resp)? JSON.parse(f.resp) : (f.resp||{}),
       comentario:f.comentario||'', tema: f.comentario? detectarTema(f.comentario):null,
+      uid:f.uid||'', instrumento:f.instrumento||'', hora:f.hora||'',
     };
   }catch(e){ return null; }
 }
@@ -3741,6 +3810,7 @@ function prodEnviar(reg){
   apiGuardar(payload, function(r){
     if(r && r.ok === false){ prodGuardarPendiente(reg); toast('⚠️ El servidor rechazó el registro: '+(r.error||'error desconocido')+'. Quedó en cola local.','err'); return; }
     toast('✅ Encuesta guardada en «Base de Clima Laboral» (fila '+ (r && r.total || '—') +'). Indicadores actualizados.','ok');
+    if(SESSION) setTimeout(function(){ try{ sondeoVivo(); }catch(e){} }, 800);
   }, function(){
     prodGuardarPendiente(reg);
     toast('📴 Sin conexión: la encuesta quedó guardada en el dispositivo y se reenviará automáticamente.','warn');
@@ -3755,6 +3825,7 @@ function prodPayload(reg){
     dur:reg.dur, lid:dims.lid, com:dims.com, res:dims.res, equ:dims.equ, cli:dims.cli,
     general: Math.round(scoreEnc(reg)*10)/10, resp: JSON.stringify(reg.resp),
     ab1:(reg.abiertas&&reg.abiertas[0])||'', ab2:(reg.abiertas&&reg.abiertas[1])||'', ab3:(reg.abiertas&&reg.abiertas[2])||'',
+    id: reg.uid||'', instrumento: reg.instrumento||'',
   };
 }
 function prodGuardarPendiente(reg){
@@ -3777,6 +3848,167 @@ function prodReintentarPendientes(){
 }
 </script>
 
+
+<script>
+/* =====================================================================
+   v3.2 — ENCUESTA POR QR: carga ligera y segura
+   Antes la bienvenida se mostraba con las preguntas guardadas en el celular
+   (o las de fábrica) mientras llegaban las vigentes. Ahora espera las
+   preguntas de la encuesta activa (máx. 9 s; sin señal usa las guardadas).
+   ===================================================================== */
+function iniciarEncuestaQR(){
+  window.__CFG_PUBLICO = true;
+  go('publicSurvey');
+  $('surveyRoot').innerHTML = `<div class="q-card" style="text-align:center;padding:46px 26px;max-width:520px;margin:8vh auto">
+    <div style="font-size:46px;margin-bottom:8px">⏳</div><h3 style="font-size:19px;margin-bottom:6px">Cargando la encuesta…</h3>
+    <p style="color:var(--ink-2)">Un momento, por favor.</p></div>`;
+  let listo = false;
+  const arrancar = function(){ if(listo) return; listo = true; startSurveyPublic(); try{ prodReintentarPendientes(); }catch(e){} };
+  setTimeout(arrancar, 9000);
+  apiEncuestaPublica(function(r){ try{ if(r && r.config) aplicarConfigRemota(r.config); }catch(e){} arrancar(); }, arrancar);
+}
+function apiEncuestaPublica(ok, err){
+  if(API_MODE==='gas'){ google.script.run.withSuccessHandler(ok).withFailureHandler(err).obtenerDatos(); return; }
+  fetch(SIGCL_API_URL + '?api=encuesta', {method:'GET'}).then(function(r){ return r.text(); }).then(function(t){
+    let j = null; try{ j = JSON.parse(t); }catch(e){}
+    if(j && j.config) return ok(j);
+    apiObtener(ok, err); // Code.gs anterior: lectura completa
+  }).catch(err);
+}
+function nuevoUid(){ return 'E' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2,6).toUpperCase(); }
+
+/* =====================================================================
+   v3.2 — NUEVA ENCUESTA POR PERIODO (mes / año)
+   Un solo botón crea: el periodo (campaña con fechas del mes o del año)
+   + su propia lista de preguntas (módulo). Al activarla, la anterior se
+   cierra y queda en el historial con sus preguntas y respuestas.
+   ===================================================================== */
+const MESES_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+function activarInstrumentoSilencioso(id){
+  const t = INSTRUMENTOS.find(i=>i.id===id); if(!t || t.activo) return;
+  snapshotInstrumento(); // guarda las preguntas del módulo saliente
+  INSTRUMENTOS.forEach(i=> i.activo = (i.id===id));
+  cargarDimsDe(t);
+  guardarInstrumentos();
+}
+function etiquetaPeriodo(c){
+  const p = c.periodo || '';
+  if(/^\d{4}-\d{2}$/.test(p)) return MESES_ES[+p.slice(5)-1] + ' ' + p.slice(0,4);
+  if(/^\d{4}$/.test(p)) return 'Año ' + p;
+  return (c.inicio||'') + ' → ' + (c.cierre||'');
+}
+function neNombreAuto(){
+  const n = $('neNom'); if(!n || n.dataset.manual==='1') return;
+  const tipo = $('neTipo').value, frec = $('neFrec').value, anio = $('neAnio').value;
+  n.value = 'Encuesta de ' + tipo + ' – ' + (frec==='Mensual' ? MESES_ES[+$('neMes').value] + ' ' : '') + anio;
+}
+function neCambioFrec(){ $('neMesBox').style.display = $('neFrec').value==='Mensual' ? '' : 'none'; neNombreAuto(); }
+function neCambioPreg(){ $('neCeroBox').style.display = $('nePreg').value==='cero' ? '' : 'none'; }
+function nuevaEncuestaPeriodo(){
+  if(!permiso(['Administrador'])) return;
+  const hoy = new Date(), act = instrumentoActivo();
+  const nAct = DIMENSIONES.reduce((a,d)=>a+d.preguntas.length,0);
+  const nBase = DIMS_BASE.reduce((a,d)=>a+d.preguntas.length,0);
+  modal(`<h3>🆕 Nueva encuesta</h3>
+  <p class="muted small" style="margin:8px 0 12px">Cree la encuesta del mes o del año. Tendrá su propia lista de preguntas (podrá agregar las que desee) y la anterior quedará guardada en el historial.</p>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div><label>Tipo de encuesta</label><select id="neTipo" onchange="neNombreAuto()">${TIPOS_INSTRUMENTO.map(t=>`<option ${t===(act&&act.tipo)?'selected':''}>${t}</option>`).join('')}</select></div>
+    <div><label>Periodicidad</label><select id="neFrec" onchange="neCambioFrec()"><option>Mensual</option><option>Anual</option></select></div>
+    <div id="neMesBox"><label>Mes</label><select id="neMes" onchange="neNombreAuto()">${MESES_ES.map((m,i)=>`<option value="${i}" ${i===hoy.getMonth()?'selected':''}>${m}</option>`).join('')}</select></div>
+    <div><label>Año</label><input type="number" id="neAnio" min="2024" max="2100" value="${hoy.getFullYear()}" oninput="neNombreAuto()"></div>
+  </div>
+  <label style="margin-top:12px">Nombre de la encuesta</label>
+  <input id="neNom" oninput="this.dataset.manual='1'">
+  <label style="margin-top:12px">Preguntas</label>
+  <select id="nePreg" onchange="neCambioPreg()">
+    <option value="copiar">Copiar las preguntas de la encuesta actual «${act? act.nombre : ''}» (${nAct}) — luego agrega las nuevas</option>
+    <option value="base">Modelo base del sistema (${nBase} preguntas en 5 dimensiones)</option>
+    <option value="cero">Empezar en blanco (una dimensión y su primera pregunta)</option>
+  </select>
+  <div id="neCeroBox" style="display:none">
+    <div style="display:grid;grid-template-columns:1fr 2fr;gap:12px;margin-top:10px">
+      <div><label>Primera dimensión</label><input id="neDim" placeholder="Ej.: Bienestar"></div>
+      <div><label>Primera pregunta</label><input id="neQ1" placeholder="Ej.: Me siento valorado en mi área."></div>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+    <div><label>Meta de participación (%)</label><input type="number" id="neMeta" value="90" min="1" max="100"></div>
+  </div>
+  <label style="display:flex;align-items:center;gap:8px;margin-top:14px;font-weight:600;text-transform:none;letter-spacing:0">
+    <input type="checkbox" id="neAct" checked style="width:auto"> Activar ahora: el QR y la encuesta asistida aplicarán esta encuesta (la actual se cierra y queda en el historial)
+  </label>
+  <div class="flex mt16" style="justify-content:flex-end">
+    <button class="btn btn-o" onclick="closeModal()">Cancelar</button>
+    <button class="btn btn-p" onclick="crearEncuestaPeriodo()">Crear encuesta</button></div>`);
+  setTimeout(neNombreAuto, 30);
+}
+function crearEncuestaPeriodo(){
+  const tipo = $('neTipo').value, frec = $('neFrec').value;
+  const mes = +$('neMes').value, anio = +$('neAnio').value;
+  const nom = $('neNom').value.trim();
+  if(!(anio>=2024 && anio<=2100)) return toast('⚠️ Indique un año válido.','warn');
+  if(nom.length<4) return toast('⚠️ Escriba el nombre de la encuesta.','warn');
+  if(CAMPANIAS.some(c=>(c.nombre||'').toLowerCase()===nom.toLowerCase()) || INSTRUMENTOS.some(i=>(i.nombre||'').toLowerCase()===nom.toLowerCase()))
+    return toast('⚠️ Ya existe una encuesta con ese nombre. Cambie el nombre o use la existente desde el historial.','warn');
+  const pad = n=> String(n).padStart(2,'0');
+  const periodo = frec==='Mensual' ? anio+'-'+pad(mes+1) : String(anio);
+  const inicio = frec==='Mensual' ? anio+'-'+pad(mes+1)+'-01' : anio+'-01-01';
+  const cierre = frec==='Mensual' ? fechaHoy(new Date(anio, mes+1, 0)) : anio+'-12-31';
+  snapshotInstrumento();
+  const modo = $('nePreg').value;
+  let dims;
+  if(modo==='copiar') dims = JSON.parse(JSON.stringify(DIMENSIONES));
+  else if(modo==='base') dims = JSON.parse(JSON.stringify(DIMS_BASE));
+  else {
+    const dn = $('neDim').value.trim() || 'General', q1 = $('neQ1').value.trim();
+    if(q1.length<10) return toast('⚠️ Escriba la primera pregunta (mínimo 10 caracteres).','warn');
+    dims = [{k:'d'+Date.now().toString(36), nombre:dn, ico:ICONO_TIPO[tipo]||'⭐', color:'var(--s6)', preguntas:[q1]}];
+  }
+  const iid = 'I' + (Math.max(0, ...INSTRUMENTOS.map(i=> +String(i.id).replace(/\D/g,'')||0)) + 1);
+  INSTRUMENTOS.push({id:iid, nombre:nom, tipo:tipo, activo:false, dims:dims, periodo:periodo});
+  const cid = 'C' + (Math.max(0, ...CAMPANIAS.map(c=> +String(c.id).replace(/\D/g,'')||0)) + 1);
+  const activar = $('neAct') && $('neAct').checked;
+  if(activar) CAMPANIAS.forEach(c=>{ if(c.estado==='Activa') c.estado='Cerrada'; });
+  CAMPANIAS.push({id:cid, nombre:nom, inicio:inicio, cierre:cierre, estado: activar?'Activa':'Programada',
+    meta:(Math.min(100, +$('neMeta').value||90))/100, resp:(SESSION && SESSION.nombre) || 'Joel Timoteo', periodo:periodo, instrumento:iid});
+  if(activar){ activarInstrumentoSilencioso(iid); FILT.campania = cid; }
+  else guardarInstrumentos();
+  rebuildQRS(); syncCampanias();
+  auditar('Creó encuesta por periodo','Preguntas y Encuestas', nom+' · '+etiquetaPeriodo({periodo:periodo})+(activar?' (activada)':''));
+  closeModal(); render();
+  toast(activar ? '✅ «'+nom+'» creada y ACTIVA. Agregue abajo las preguntas que desee: el QR las aplica al instante.'
+                : '✅ «'+nom+'» creada como Programada. Actívela desde el historial cuando corresponda.','ok');
+}
+function historialEncuestasHTML(){
+  if(!CAMPANIAS.length) return '';
+  const grupos = {};
+  CAMPANIAS.forEach(c=>{ const y = String(c.periodo || c.inicio || '—').slice(0,4); (grupos[y] = grupos[y] || []).push(c); });
+  const anios = Object.keys(grupos).sort().reverse();
+  const nPreg = function(c){
+    const i = INSTRUMENTOS.find(x=>x.id===c.instrumento); if(!i) return '—';
+    return (i.activo ? DIMENSIONES : (i.dims||[])).reduce((a,d)=>a+(d.preguntas||[]).length,0);
+  };
+  return `<div class="card mb16" style="border-left:4px solid var(--brand-400)">
+    <div class="flex between wrap">
+      <div><div class="card-h">📚 Encuestas por periodo (mes / año)</div>
+      <div class="card-sub">Cada periodo conserva sus preguntas y sus respuestas. Solo una está <b>ACTIVA</b>: es la que aplican el QR y la encuesta asistida.</div></div>
+      <button class="btn btn-p btn-sm no-print" style="background:linear-gradient(135deg,#e11d2e,#b3121f)" onclick="nuevaEncuestaPeriodo()">🆕 Nueva encuesta</button>
+    </div>
+    ${anios.map(y=>`<div class="mt16"><div class="b" style="margin-bottom:6px">📅 ${y}</div>
+      <div style="overflow:auto"><table class="tbl"><thead><tr><th>Encuesta</th><th>Periodo</th><th>Preguntas</th><th>Respuestas</th><th>Estado</th><th></th></tr></thead><tbody>
+      ${grupos[y].slice().sort((a,b)=>(b.inicio||'').localeCompare(a.inicio||'')).map(c=>{
+        const n = DB.encuestas.filter(e=>e.campania===c.id).length;
+        const est = c.estado==='Activa' ? '<span class="chip chip-exc">● Activa</span>' : c.estado==='Programada' ? '<span class="chip chip-info">Programada</span>' : '<span class="chip chip-neutral">Cerrada</span>';
+        return `<tr><td class="b">${c.nombre}</td><td>${etiquetaPeriodo(c)}</td><td class="num">${nPreg(c)}</td><td class="num b">${n.toLocaleString('es-PE')}</td><td>${est}</td>
+          <td class="no-print" style="white-space:nowrap;text-align:right">
+            <button class="btn btn-ghost btn-sm" title="Ver resultados de este periodo" onclick="FILT.campania='${c.id}';nav('dashboard')">📊</button>
+            ${c.estado!=='Activa' ? `<button class="btn btn-o btn-sm" onclick="activarCampania('${c.id}')">▶ Activar</button>` : ''}
+          </td></tr>`;
+      }).join('')}
+      </tbody></table></div></div>`).join('')}
+  </div>`;
+}
+</script>
 <script>
 /* =====================================================================
    PWA — instalar el SIGCL como aplicación en PC o celular
