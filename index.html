@@ -2107,7 +2107,7 @@ function svSubmit(rootId,publico){
   const reg = {
     id: DB.encuestas.length+1, campania:camp.id, empresa:s.datos.empresa, sector:s.datos.sector, area:s.datos.area,
     supervisor: s.datos.supervisor || supervisorDe(s.datos.sector), jefe:s.datos.jefe, tiempo:s.datos.tiempo, tipo:s.datos.tipo,
-    fecha:new Date().toISOString().slice(0,10), dur:Math.round((Date.now()-s.inicio)/1000),
+    fecha:fechaHoy(), dur:Math.round((Date.now()-s.inicio)/1000),
     resp:s.resp, comentario:coment, tema: coment? detectarTema(coment) : null, abiertas:s.abiertas,
     canal: publico ? 'QR trabajador' : 'Asistida', usuario: SESSION ? SESSION.user : '',
     uid: nuevoUid(), instrumento: (function(){ const i=instrumentoActivo(); return i? i.id+' · '+i.nombre : ''; })(),
@@ -4191,7 +4191,8 @@ function fbEscuchar(){
         window.PRESENCIA = snap.docs.map(d=>d.data());
         if(VIEW==='panel') pcPintarVivo();
       }, function(){}));
-      window.__fbEscuchando.push(db.collection('actividad').orderBy('ts','desc').limit(60).onSnapshot(function(snap){
+      const hoy0 = new Date(); hoy0.setHours(0,0,0,0); // v3.4 — toda la actividad de hoy (tráfico por usuario)
+      window.__fbEscuchando.push(db.collection('actividad').where('ts','>=', firebase.firestore.Timestamp.fromMillis(hoy0.getTime())).orderBy('ts','desc').limit(1000).onSnapshot(function(snap){
         window.ACTIVIDAD = snap.docs.map(d=>d.data());
         if(VIEW==='panel') pcPintarVivo();
       }, function(){}));
@@ -4306,6 +4307,14 @@ function vPanel(){
     <div id="pcVivo" class="mt8"></div>
   </div>
 
+  <div class="card mb16" style="border-left:4px solid var(--acc-500,#e11d2e)">
+    <div class="flex between wrap"><div><div class="card-h">📶 Tráfico por usuario</div>
+      <div class="card-sub">Conexiones de hoy y encuestas enviadas por cada usuario (asistidas y por QR de sus sectores) · se actualiza solo</div></div>
+      <button class="btn btn-o btn-sm no-print" onclick="pcExportarTrafico()">⬇️ Exportar CSV</button></div>
+    <div style="height:210px;margin-top:10px"><canvas id="pcChHoras"></canvas></div>
+    <div id="pcTrafico" class="mt16"></div>
+  </div>
+
   <div class="card mb16" style="border-left:4px solid var(--brand-400)">
     <div class="card-h">👥 Usuarios · módulos y horario</div>
     <div class="card-sub">Presione ⚙️ para marcar o quitar módulos y asignar su horario de ingreso. Los cambios llegan a su equipo en segundos.</div>
@@ -4365,6 +4374,7 @@ function pcPintarVivo(){
   put('pcFbEstado', window.FB_VIVO? '🟢 conectado — las encuestas llegan al instante' : '⏳ conectando…');
   const icoEv = ev => /Ingres/.test(ev)?'🔑':/Sali/.test(ev)?'🚪':/encuesta/i.test(ev)?'📝':/horario|Intento/i.test(ev)?'⛔':/permiso/i.test(ev)?'🔐':'•';
   const sinFb = `<p class="small muted">Disponible al activar Firebase (config.js).</p>`;
+  try{ pcPintarTrafico(); }catch(e){ console.warn('tráfico', e); }
   box.innerHTML = `<div class="charts-grid">
     <div class="card span4" style="margin:0"><div class="card-h">🟢 En línea ahora (${window.FB_VIVO? online.length : '—'})</div>
       ${!window.FB_VIVO ? sinFb : online.length ? `<table class="tbl">${online.map(p=>`<tr><td><span style="color:#16a34a">●</span> <b>${pcEsc(p.nombre||p.user)}</b><div class="small muted">${pcEsc(p.rol)} · ${pcEsc(p.disp||'')}</div></td>
@@ -4382,6 +4392,104 @@ function pcPintarVivo(){
   </div>`;
 }
 setInterval(function(){ if(SESSION && VIEW==='panel' && !document.hidden) pcPintarVivo(); }, 30000); // refresca los "hace X min"
+
+/* =====================================================================
+   v3.4 — TRÁFICO POR USUARIO: conexiones de hoy + encuestas enviadas
+   · Conexiones: bitácora «actividad» de Firebase (ingresos de hoy)
+   · Encuestas: base oficial + flujo en vivo (asistidas por el usuario y
+     las del QR en los sectores que tiene a cargo)
+   ===================================================================== */
+function pcLunes(){ const d = new Date(); const w = (d.getDay()+6)%7; d.setDate(d.getDate()-w); return fechaHoy(d); }
+function pcNorm(t){ return String(t||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim(); }
+function pcEncuestasUnificadas(){
+  /* base + las que llegaron en vivo y aún no están en la base */
+  const lista = DB.encuestas.map(e=>({uid:e.uid, fecha:e.fecha, hora:e.hora, usuario:e.usuario, canal:e.canal, sector:e.sector, supervisor:e.supervisor}));
+  const vistos = {}; lista.forEach(e=>{ if(e.uid) vistos[e.uid]=1; });
+  (window.FEED_VIVO||[]).forEach(d=>{ if(d.id && !vistos[d.id]) lista.push({uid:d.id, fecha:d.fecha, hora:d.hora, usuario:d.usuario, canal:d.canal, sector:d.sector, supervisor:d.supervisor}); });
+  return lista;
+}
+function pcCalcTrafico(){
+  const hoy = fechaHoy(), lunes = pcLunes(), ahora = Date.now();
+  const encs = pcEncuestasUnificadas();
+  const act = window.ACTIVIDAD || [];
+  const pres = {}; (window.PRESENCIA||[]).forEach(p=>{ pres[p.user] = p; });
+  return pcUsuarios().map(u=>{
+    const mias = encs.filter(e=>e.usuario===u.user);
+    const secs = (u.sectores||[]).map(pcNorm);
+    const qrSec = encs.filter(e=>/QR/i.test(e.canal||'') && !e.usuario &&
+      ((secs.length && secs.includes(pcNorm(e.sector))) || (pcNorm(e.supervisor) && pcNorm(e.supervisor)===pcNorm(u.nombre))));
+    const ingresos = act.filter(a=>a.user===u.user && a.evento==='Ingresó al sistema');
+    const p = pres[u.user]; const pMs = p ? tsMs(p) : 0;
+    const enLinea = !!(p && p.estado==='En línea' && ahora-pMs < 5*60000);
+    return {
+      u, enLinea, pMs, disp: (p && p.disp) || (ingresos[0] && ingresos[0].disp) || '',
+      ingresosHoy: ingresos.length,
+      primera: ingresos.length ? tsMs(ingresos[ingresos.length-1]) : 0,
+      ultima: ingresos.length ? tsMs(ingresos[0]) : 0,
+      asisHoy: mias.filter(e=>e.fecha===hoy).length,
+      qrHoy: qrSec.filter(e=>e.fecha===hoy).length,
+      semana: mias.filter(e=>e.fecha>=lunes).length + qrSec.filter(e=>e.fecha>=lunes).length,
+      total: mias.length + qrSec.length,
+    };
+  }).sort((a,b)=> (b.asisHoy+b.qrHoy)-(a.asisHoy+a.qrHoy) || b.ingresosHoy-a.ingresosHoy || (b.enLinea-a.enLinea));
+}
+const pcHoraTxt = ms => ms ? new Date(ms).toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'}) : '—';
+function pcPintarTrafico(){
+  const box = $('pcTrafico'); if(!box) return;
+  const filas = pcCalcTrafico();
+  const tot = filas.reduce((a,f)=>({ing:a.ing+f.ingresosHoy, as:a.as+f.asisHoy, qr:a.qr+f.qrHoy, sem:a.sem+f.semana}), {ing:0,as:0,qr:0,sem:0});
+  const fb = !!window.FB_VIVO;
+  box.innerHTML = `<div style="overflow:auto"><table class="tbl">
+    <thead><tr><th>Usuario</th><th>Estado</th><th class="num">Conexiones hoy</th><th>1.ª / última</th><th class="num">Asistidas hoy</th><th class="num">QR de sus sectores hoy</th><th class="num">Semana</th><th class="num">Total</th></tr></thead><tbody>
+    ${filas.map(f=>`<tr>
+      <td><b>${pcEsc(f.u.nombre)}</b><div class="small muted">${pcEsc(f.u.user)} · ${pcEsc(f.u.rol)}</div></td>
+      <td>${!fb ? '<span class="small muted">—</span>' : f.enLinea ? `<span class="chip chip-exc">● En línea</span><div class="small muted">${pcEsc(f.disp)}</div>`
+          : `<span class="chip chip-neutral">○ Desconectado</span><div class="small muted">${f.pMs? hace(f.pMs) : 'sin registro'}</div>`}</td>
+      <td class="num b">${fb? f.ingresosHoy : '—'}</td>
+      <td class="small">${fb && f.ingresosHoy? pcHoraTxt(f.primera)+' / '+pcHoraTxt(f.ultima) : '—'}</td>
+      <td class="num b">${f.asisHoy}</td>
+      <td class="num b">${f.qrHoy}</td>
+      <td class="num">${f.semana}</td>
+      <td class="num">${f.total}</td></tr>`).join('')}
+    </tbody>
+    <tfoot><tr style="font-weight:800"><td>Total</td><td></td><td class="num">${fb? tot.ing : '—'}</td><td></td><td class="num">${tot.as}</td><td class="num">${tot.qr}</td><td class="num">${tot.sem}</td><td></td></tr></tfoot>
+    </table></div>
+    ${fb? '' : '<div class="small muted mt8">Las conexiones se muestran cuando Firebase está activo. Las encuestas se cuentan desde la base.</div>'}
+    <div class="small muted mt8">«QR de sus sectores»: encuestas que el trabajador respondió con su celular en los sectores a cargo del usuario.</div>`;
+  pcGraficoHoras();
+}
+function pcGraficoHoras(){
+  const cv = $('pcChHoras'); if(!cv || typeof Chart==='undefined') return;
+  const hoy = fechaHoy();
+  const encs = pcEncuestasUnificadas().filter(e=>e.fecha===hoy);
+  const hDe = t => parseInt(String(t||'').slice(0,2),10);
+  const hs = encs.map(e=>hDe(e.hora)).concat((window.ACTIVIDAD||[]).map(a=>new Date(tsMs(a)).getHours())).filter(h=>h>=0 && h<=23);
+  const horas = []; for(let h=Math.min(5, ...hs); h<=Math.max(20, ...hs); h++) horas.push(h); // 05–20 h, ampliado si hay movimiento fuera de ese rango
+  const serieQR  = horas.map(h=> encs.filter(e=>hDe(e.hora)===h && /QR/i.test(e.canal||'')).length);
+  const serieAsi = horas.map(h=> encs.filter(e=>hDe(e.hora)===h && !/QR/i.test(e.canal||'')).length);
+  const serieIng = horas.map(h=> (window.ACTIVIDAD||[]).filter(a=>a.evento==='Ingresó al sistema' && new Date(tsMs(a)).getHours()===h).length);
+  const data = {labels: horas.map(h=>String(h).padStart(2,'0')+':00'), datasets:[
+    {type:'bar', label:'Encuestas QR', data:serieQR, backgroundColor:'rgba(225,29,46,.75)', stack:'e', borderRadius:4},
+    {type:'bar', label:'Encuestas asistidas', data:serieAsi, backgroundColor:'rgba(42,120,214,.8)', stack:'e', borderRadius:4},
+    {type:'line', label:'Conexiones', data:serieIng, borderColor:'#16a34a', backgroundColor:'#16a34a', tension:.3, pointRadius:3}]};
+  if(window.__pcChart && window.__pcChart.canvas===cv){ window.__pcChart.data = data; window.__pcChart.update('none'); return; }
+  try{ if(window.__pcChart) window.__pcChart.destroy(); }catch(e){}
+  window.__pcChart = new Chart(cv, {data, options:{responsive:true, maintainAspectRatio:false, animation:false,
+    plugins:{legend:{position:'bottom'}, datalabels:{display:false}, title:{display:true, text:'Tráfico de hoy por hora'}},
+    scales:{x:{stacked:true, grid:{display:false}}, y:{stacked:true, beginAtZero:true, ticks:{precision:0}}}}});
+}
+function pcExportarTrafico(){
+  const filas = pcCalcTrafico();
+  const cab = ['Usuario','Nombre','Rol','Estado','Conexiones hoy','Primera conexión','Última conexión','Asistidas hoy','QR de sus sectores hoy','Semana','Total'];
+  const q = v => '"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const lineas = [cab.map(q).join(';')].concat(filas.map(f=>[f.u.user, f.u.nombre, f.u.rol, f.enLinea?'En línea':'Desconectado', f.ingresosHoy,
+    pcHoraTxt(f.primera), pcHoraTxt(f.ultima), f.asisHoy, f.qrHoy, f.semana, f.total].map(q).join(';')));
+  const blob = new Blob(['﻿'+lineas.join('\r\n')], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'SIGCL_trafico_usuarios_'+fechaHoy()+'.csv';
+  document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  auditar('Exportó tráfico por usuario','Panel de Control', fechaHoy());
+}
+
 
 function pcEditar(user){
   if(!accesoVista(NAV.find(x=>x.id==='panel'))) return;
