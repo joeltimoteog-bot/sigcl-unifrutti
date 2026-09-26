@@ -661,6 +661,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
       </div>
       <button class="btn gx-entrar" style="margin-top:20px" onclick="doLogin()">INGRESAR</button>
       <div id="lgError" style="color:#ffb3b3;font-size:12px;margin-top:10px;text-align:center"></div>
+      <div style="text-align:center;margin-top:8px;font-size:11.5px"><a href="#" onclick="verAvisoPrivacidad();return false" style="color:#cfe0ff;text-decoration:underline">🔒 Aviso de privacidad y uso del sistema</a></div>
       <div class="login-meta">
         <label style="display:flex;align-items:center;gap:6px;margin:0;font-weight:500;text-transform:none;letter-spacing:0;font-size:12px"><input type="checkbox" id="lgRemember" style="width:auto">Recordar usuario</label>
         <a href="#" onclick="forgotPw();return false">¿Olvidó su contraseña?</a>
@@ -816,7 +817,7 @@ const LIKERT = [
 const ABIERTAS = [
   '¿Qué situación considera que debería mejorar su jefe inmediato o el ambiente de trabajo?',
   '¿Qué sugerencias propone para mejorar el clima laboral?',
-  '¿Desea reportar alguna situación adicional? (opcional)',
+  '¿Desea reportar alguna situación adicional? (opcional · para denuncias de hostigamiento use el canal oficial de la empresa)',
 ];
 
 /* ---------- CAMPAÑAS ---------- */
@@ -884,13 +885,13 @@ if(ES_DEMO) (function generarEncuestas(){
 
 /* ---------- USUARIOS ---------- */
 const USUARIOS = [
-  {user:'jtimoteo', nombre:'Joel Ángel Timoteo Gonza', rol:'Super Administrador', cargo:'Coordinador de Relaciones Laborales', correo:'jtimoteo@unifrutti.com', estado:'Activo', ultimo:'2026-08-01 07:42', ip:'190.234.18.7', disp:'Chrome · Windows 11', protegido:true, pass:'jtimoteo2026', debeCambiar:true},
-  {user:'admin', nombre:'Administrador GH', rol:'Administrador', cargo:'Analista de Gestión Humana', correo:'gh@unifrutti.com', estado:'Activo', ultimo:'2026-07-31 16:10', ip:'190.234.18.9', disp:'Edge · Windows 10', pass:'admin2026'},
-  {user:'fpulache', nombre:'Flor Pulache Viera', rol:'Supervisor GH', cargo:'Supervisora GH', correo:'fpulache@unifrutti.com', estado:'Activo', ultimo:'2026-07-31 14:55', ip:'10.20.4.31', disp:'Android · Tablet', sectores:['Los Olivares'], pass:'fpulache2026'},
-  {user:'amartinez', nombre:'Alexander Martínez Juárez', rol:'Supervisor GH', cargo:'Supervisor GH', correo:'amartinez@unifrutti.com', estado:'Activo', ultimo:'2026-07-30 11:02', ip:'10.20.4.44', disp:'Android · Celular', sectores:['Punta Arenas'], pass:'amartinez2026'},
-  {user:'atineo', nombre:'Alexander Tineo Ramos', rol:'Supervisor GH', cargo:'Supervisor GH', correo:'atineo@unifrutti.com', estado:'Activo', ultimo:'2026-07-29 09:18', ip:'10.20.4.52', disp:'Chrome · Windows 10', sectores:['Olivares Bajo'], pass:'atineo2026'},
-  {user:'gerencia', nombre:'Gerencia General', rol:'Gerencia', cargo:'Gerente General', correo:'gerencia@unifrutti.com', estado:'Activo', ultimo:'2026-07-28 18:30', ip:'190.234.18.2', disp:'Safari · MacOS', pass:'gerencia2026'},
-  {user:'consulta', nombre:'Usuario Consulta', rol:'Consulta', cargo:'Comité ETI', correo:'eti@unifrutti.com', estado:'Activo', ultimo:'2026-07-25 10:00', ip:'190.234.18.5', disp:'Chrome · Windows 11', pass:'consulta2026'},
+  {user:'jtimoteo', nombre:'Joel Ángel Timoteo Gonza', rol:'Super Administrador', cargo:'Coordinador de Relaciones Laborales', correo:'jtimoteo@unifrutti.com', estado:'Activo', ultimo:'2026-08-01 07:42', ip:'190.234.18.7', disp:'Chrome · Windows 11', protegido:true, passH:'4717afc2431d73fa73427b3e8548db595bfdd8ffdcbd8e57d68fb08e7b07ab11', debeCambiar:true},
+  {user:'admin', nombre:'Administrador GH', rol:'Administrador', cargo:'Analista de Gestión Humana', correo:'gh@unifrutti.com', estado:'Activo', ultimo:'2026-07-31 16:10', ip:'190.234.18.9', disp:'Edge · Windows 10', passH:'bee9aa8527b6d12063b327fa711024ec499f816419d92eaa2151ba60e299a9f3', debeCambiar:true},
+  {user:'fpulache', nombre:'Flor Pulache Viera', rol:'Supervisor GH', cargo:'Supervisora GH', correo:'fpulache@unifrutti.com', estado:'Activo', ultimo:'2026-07-31 14:55', ip:'10.20.4.31', disp:'Android · Tablet', sectores:['Los Olivares'], passH:'9ce28d1e13c6bfb784612a980338c02d110b18f5f04a0122011d309e6e7b4510', debeCambiar:true},
+  {user:'amartinez', nombre:'Alexander Martínez Juárez', rol:'Supervisor GH', cargo:'Supervisor GH', correo:'amartinez@unifrutti.com', estado:'Activo', ultimo:'2026-07-30 11:02', ip:'10.20.4.44', disp:'Android · Celular', sectores:['Punta Arenas'], passH:'a677459a729445dc80071e06b41d0d21ebba6c7abc419075732cfc3879f8f081', debeCambiar:true},
+  {user:'atineo', nombre:'Alexander Tineo Ramos', rol:'Supervisor GH', cargo:'Supervisor GH', correo:'atineo@unifrutti.com', estado:'Activo', ultimo:'2026-07-29 09:18', ip:'10.20.4.52', disp:'Chrome · Windows 10', sectores:['Olivares Bajo'], passH:'6e5fb14190ae49707e343a725e25d0f6608593d8aeccf218daac54cf38070128', debeCambiar:true},
+  {user:'gerencia', nombre:'Gerencia General', rol:'Gerencia', cargo:'Gerente General', correo:'gerencia@unifrutti.com', estado:'Activo', ultimo:'2026-07-28 18:30', ip:'190.234.18.2', disp:'Safari · MacOS', passH:'b5aa7046eafe31f926055b5f02eafaf9dc9e485d91c7a198887c1e4ca6477ef4', debeCambiar:true},
+  {user:'consulta', nombre:'Usuario Consulta', rol:'Consulta', cargo:'Comité ETI', correo:'eti@unifrutti.com', estado:'Activo', ultimo:'2026-07-25 10:00', ip:'190.234.18.5', disp:'Chrome · Windows 11', passH:'c441e5d7f87215f3ead3bae816411597c50b3ecbf97ee074d197e23c0949eeba', debeCambiar:true},
 ];
 
 /* ---------- PLANES DE ACCIÓN DEMO ---------- */
@@ -1239,11 +1240,11 @@ function iniciarSesion(usr){
   render();
   if(usr.debeCambiar){
     modal(`<h3>🔐 Cambio de contraseña obligatorio</h3>
-    <p class="muted small" style="margin:8px 0 14px">Por política de seguridad, en el primer inicio de sesión debe establecer una nueva contraseña (mínimo 8 caracteres, con mayúscula, minúscula y número). En la versión enterprise se valida con bcrypt en el servidor.</p>
+    <p class="muted small" style="margin:8px 0 14px">Por política de seguridad, en el primer inicio de sesión debe establecer una nueva contraseña (mínimo 8 caracteres, con mayúscula, minúscula y número). La contraseña se valida en el servidor y se guarda cifrada (hash).</p>
     <label>Nueva contraseña</label><input type="password" id="np1" placeholder="••••••••••••">
     <div style="height:10px"></div><label>Confirmar contraseña</label><input type="password" id="np2">
     <div class="flex mt16" style="justify-content:flex-end">
-      <button class="btn btn-o" onclick="closeModal();toast('Recuerde cambiarla en su próximo acceso.','warn')">Más tarde (demo)</button>
+      ${window.PROD && !window.PROD_DEMO ? '' : `<button class="btn btn-o" onclick="closeModal();toast('Recuerde cambiarla en su próximo acceso.','warn')">Más tarde (demo)</button>`}
       <button class="btn btn-p" onclick="cambiarPass()">Guardar contraseña</button></div>`);
   }
   toast(`👋 Bienvenido, ${usr.nombre.split(' ')[0]}. Sesión iniciada como ${usr.rol}.`,'ok');
@@ -1420,6 +1421,12 @@ function initCarrusel(rootSel){
 
 /* ---------- landing ---------- */
 function initLandingStats(){
+  if(!SESSION && window.__landing && !DB.encuestas.length){   // v3.6 — solo totales agregados antes de ingresar
+    animCount($('ls-enc'), window.__landing.total||0); $('ls-clima').textContent = (window.__landing.clima||0)+'%';
+    if($('gc-clima')) $('gc-clima').textContent = (window.__landing.clima||0)+'%';
+    if($('gc-bar')) $('gc-bar').style.width = (window.__landing.clima||0)+'%';
+    return;
+  }
   const encs = DB.encuestas.filter(e=>e.campania==='C3');
   const s = statsDe(encs);
   animCount($('ls-enc'), DB.encuestas.length);
@@ -1827,7 +1834,8 @@ function startSurveyPublic(){
       <div>🚩 &nbsp;<b>Campaña:</b> ${camp.nombre}</div>
     </div>
     <button class="btn gx-entrar gx-cta" style="font-size:15px" onclick="SURVEY=nuevoSurvey();renderSurvey('surveyRoot', true)">✅ COMENZAR ENCUESTA</button>
-    <div class="small muted mt16">Sus respuestas se tratan con confidencialidad y se usan únicamente con fines de mejora organizacional.</div>
+    <div class="small muted mt16">Sus respuestas se tratan con confidencialidad y se usan únicamente con fines de mejora organizacional. <a href="#" onclick="verAvisoPrivacidad();return false">Ver aviso de privacidad</a>.
+      <div style="margin-top:10px;font-size:12px;border-left:3px solid #e11d2e;padding:6px 10px;text-align:left;background:rgba(225,29,46,.07);border-radius:8px">🚨 Esta encuesta no reemplaza una denuncia formal. Para hostigamiento sexual, acoso o violencia, usa el canal oficial de denuncias de la empresa o acude a Gestión Humana.</div></div>
   </div>`;
   window.scrollTo(0,0);
 }
@@ -3018,7 +3026,7 @@ function vUsuarios(){
   </tbody></table></div>
   <div class="card mt16" style="max-width:860px"><div class="card-h">🛡️ Políticas de seguridad activas</div>
   <ul style="margin-left:18px;font-size:13px;color:var(--ink-2);line-height:2">
-    <li>Contraseñas: mínimo 8 caracteres, con mayúscula, minúscula y número · hash bcrypt · sin repetir las últimas 5</li>
+    <li>Contraseñas: mínimo 8 caracteres, con mayúscula, minúscula y número · hash SHA-256 con sal, validada en el servidor</li>
     <li>Perfiles: Administrador → solo Indicadores, Resultados y Exportación · Supervisor GH → solo Encuesta y su Contador · Entrevistados → solo responden por QR · módulos adicionales requieren autorización del Super Administrador</li>
     <li>Bloqueo automático de 15 minutos tras 5 intentos fallidos, con registro de IP, navegador, fecha y hora</li>
     <li>Tokens JWT con expiración configurable · cierre de sesión por inactividad (15 min) · cookies HttpOnly/Secure</li>
@@ -3695,7 +3703,7 @@ function initProd(){
         initLandingStats();
         if(SESSION) render();
       }
-      toast('☁️ Conectado a «Base de Clima Laboral»: '+ (r && r.filas ? r.filas.length : 0) +' encuesta(s) reales cargadas.','ok');
+      if(r && Array.isArray(r.filas) && window.SIGCL_TOKEN) toast('☁️ Conectado a «Base de Clima Laboral»: '+ r.filas.length +' encuesta(s) reales cargadas.','ok');
     }catch(err){ toast('⚠️ Datos recibidos pero no se pudieron procesar: '+err.message,'err'); }
     prodReintentarPendientes();
   }, function(e){
@@ -3788,13 +3796,18 @@ function apiVersion(ok, err){
 /* ---------- capa de API unificada ---------- */
 function apiObtener(ok, err){
   if(API_MODE==='gas'){
-    google.script.run.withSuccessHandler(ok).withFailureHandler(err).obtenerDatos();
+    google.script.run.withSuccessHandler(ok).withFailureHandler(err).obtenerDatos(window.SIGCL_TOKEN||'');
   } else {
-    fetch(SIGCL_API_URL + '?api=datos', {method:'GET'})
-      .then(function(r){ return r.json(); }).then(ok).catch(err);
+    fetch(SIGCL_API_URL + (window.SIGCL_TOKEN ? '?api=datos&t=' + encodeURIComponent(window.SIGCL_TOKEN) : '?api=acceso'), {method:'GET'})
+      .then(function(r){ return r.json(); }).then(function(r){
+        if(r && r.error==='auth'){ if(typeof sesionExpirada==='function') sesionExpirada(); return; }   // v3.6
+        if(r && r.resumen) window.__landing = r.resumen;
+        ok(r);
+      }).catch(err);
   }
 }
 function apiGuardar(payloadJson, ok, err){
+  try{ if(window.SIGCL_TOKEN){ const o = JSON.parse(payloadJson); o.t = window.SIGCL_TOKEN; payloadJson = JSON.stringify(o); } }catch(e){}   // v3.6
   if(API_MODE==='gas'){
     google.script.run.withSuccessHandler(ok).withFailureHandler(err).guardarEncuesta(payloadJson);
   } else {
@@ -4679,7 +4692,8 @@ function mostrarBienvenida(usr){
     <button class="bv-canal" onclick="closeModal();cbAbrir('consulta')"><span class="ico">📩</span><span><b>Enviar una consulta</b><div class="small muted">Te respondo desde el sistema; verás la respuesta en «Mis consultas»</div></span></button>
     ${sop.whatsapp ? `<button class="bv-canal" onclick="abrirWhatsApp('${waNum(sop.whatsapp)}','Hola Joel, soy ${pcEsc(usr.nombre)} (${pcEsc(usr.user)}). Tengo una consulta sobre el SIGCL: ')"><span class="ico">🟢</span><span><b>WhatsApp</b><div class="small muted">Escríbeme directamente</div></span></button>` : ''}
   </div>
-  <label style="display:flex;align-items:center;gap:8px;margin-top:14px;text-transform:none;letter-spacing:0;font-weight:500">
+  <div class="small muted" style="margin-top:12px">🔒 El uso del sistema se rige por el <a href="#" onclick="verAvisoPrivacidad();return false">aviso de privacidad</a> (se registran ingresos y acciones por seguridad).</div>
+  <label style="display:flex;align-items:center;gap:8px;margin-top:10px;text-transform:none;letter-spacing:0;font-weight:500">
     <input type="checkbox" id="bvHoy" style="width:auto"> No volver a mostrar hoy</label>
   <div class="flex mt16" style="justify-content:flex-end"><button class="btn btn-p" onclick="bvCerrar('${pcEsc(usr.user)}')">¡Empecemos! 🚀</button></div>`);
 }
@@ -5191,6 +5205,170 @@ function guardarSoporte(){
   guardarAcceso(); auditar('Actualizó canales de soporte','Panel de Control', (w||'sin WhatsApp')+' · '+(c||'sin correo'));
   toast('✅ Canales de soporte guardados: aparecen en la bienvenida y en el asistente.','ok'); render();
 }
+
+</script>
+
+<script>
+/* =====================================================================
+   v3.6 — SEGURIDAD Y CUMPLIMIENTO (Ley 29733 · D.S. 016-2024-JUS · Ley 27942)
+   · Ingreso validado en el servidor (Apps Script) → token de sesión
+   · Los datos y los cambios de configuración exigen token
+   · Firebase: cada usuario entra con su propia cuenta (ya no anónima)
+   · Aviso de privacidad (login, bienvenida y encuesta QR)
+   · Alerta cuando un comentario sugiere hostigamiento / violencia
+   ===================================================================== */
+window.SIGCL_TOKEN = null; window.SIGCL_FBPASS = null;
+
+/* ¿el Code.gs publicado ya tiene login en el servidor? (se consulta una vez) */
+function servidorConAuth(cb){
+  if(window.__authOK !== undefined) return cb(window.__authOK);
+  if(API_MODE==='gas'){ window.__authOK = true; return cb(true); }
+  fetch(SIGCL_API_URL + '?api=ver', {method:'GET'}).then(r=>r.text()).then(t=>{
+    let j = null; try{ j = JSON.parse(t); }catch(e){}
+    window.__authOK = !!(j && j.auth); cb(window.__authOK);
+  }).catch(()=> cb(null));
+}
+(function(){
+  const _doLogin = window.doLogin;
+  window.doLogin = function(){
+    if(!window.PROD || window.PROD_DEMO) return _doLogin.apply(this, arguments);
+    const u = ($('lgUser').value||'').trim().toLowerCase(), p = $('lgPass').value || '';
+    const err = m => { $('lgError').textContent = m; };
+    if(!u || !p) return err('Ingrese usuario y contraseña.');
+    err('⏳ Verificando credenciales…');
+    servidorConAuth(function(auth){
+      if(auth === null){ err('📴 No hay conexión con el servidor. Verifique su internet e intente de nuevo.'); return; }
+      if(!auth){ err(''); return _doLogin(); }            // Code.gs anterior: validación local
+      apiGuardar(JSON.stringify({tipo:'login', user:u, pass:p}), function(r){
+        if(!r || !r.ok){ err((r && r.error) || 'Usuario o contraseña incorrectos.'); try{ auditar('Ingreso fallido','Autenticación', u); }catch(e){} return; }
+        window.SIGCL_TOKEN = r.token; window.SIGCL_FBPASS = r.fbPass;
+        try{
+          if(r.datos){
+            if(r.datos.ver != null) window.__VER = r.datos.ver;
+            if(r.datos.config) aplicarConfigRemota(r.datos.config);
+            if(Array.isArray(r.datos.filas)){ DB.encuestas.length = 0; r.datos.filas.forEach((f,i)=>{ const reg = prodParseFila(f,i); if(reg) DB.encuestas.push(reg); }); }
+          }
+        }catch(e){ console.warn(e); }
+        let usr = USUARIOS.find(x=>x.user===u);
+        if(!usr){ usr = Object.assign({estado:'Activo'}, r.usuario); USUARIOS.push(usr); }
+        else Object.assign(usr, r.usuario);
+        try{ limpiarFallos(u); }catch(e){}
+        const acc = estadoAcceso(usr.user);
+        if(!acc.ok && !window._skipAcc){ window.SIGCL_TOKEN = null; err(''); mostrarBloqueo(acc, usr); return; }
+        fbStaffLogin(u, r.fbPass);
+        err(''); $('lgPass').value = '';
+        iniciarSesion(usr);
+      }, function(){ err('📴 No hay conexión con el servidor. Verifique su internet e intente de nuevo.'); });
+    });
+  };
+  const _out = window.logout;
+  window.logout = function(){
+    const r = _out.apply(this, arguments);
+    window.SIGCL_TOKEN = null; window.SIGCL_FBPASS = null; window.__fbStaffProm = null;
+    try{ if(window.firebase && firebase.apps && firebase.apps.length) firebase.auth().signOut().catch(()=>{}); }catch(e){}
+    return r;
+  };
+})();
+/* sesión vencida (token de 14 h) o cierre por inactividad: limpia credenciales */
+setInterval(function(){ if(!SESSION && window.SIGCL_TOKEN){ window.SIGCL_TOKEN = null; window.__fbStaffProm = null; } }, 5000);
+function sesionExpirada(){
+  if(!SESSION || window.__expirando) return;
+  window.__expirando = true;
+  toast('🔐 Su sesión expiró por seguridad. Vuelva a ingresar.','warn');
+  try{ logout(); go('login'); }catch(e){}
+  setTimeout(()=>{ window.__expirando = false; }, 3000);
+}
+
+/* ---------- Firebase: cuenta propia por usuario (reglas: solo personal autenticado) ---------- */
+window.__fbCargarBase = window.fbCargar;
+window.fbCargar = function(){
+  return window.__fbCargarBase().then(db => (db && window.__fbStaffProm) ? window.__fbStaffProm.then(()=>db, ()=>db) : db);
+};
+function fbStaffLogin(user, pass){
+  if(!pass || !fbConfigurado()) return;
+  const email = user + '@sigcl.unifrutti.pe';
+  window.__fbStaffProm = window.__fbCargarBase().then(function(db){
+    if(!db) return null;
+    const a = firebase.auth();
+    if(a.currentUser && a.currentUser.email === email) return db;
+    return a.signInWithEmailAndPassword(email, pass).catch(function(e){
+      if(e && /user-not-found|invalid-credential|invalid-login-credentials/.test(e.code||''))
+        return a.createUserWithEmailAndPassword(email, pass);
+      throw e;
+    }).then(()=>db);
+  }).catch(function(e){
+    console.warn('SIGCL · cuenta Firebase del usuario:', e && (e.code || e.message));
+    if(e && e.code==='auth/operation-not-allowed' && SESSION && SESSION.user==='jtimoteo')
+      toast('⚠️ Firebase: habilite «Correo electrónico/contraseña» en Authentication → Método de acceso.','warn');
+    return null;
+  });
+}
+
+/* ---------- Aviso de privacidad (borrador para revisión del área Legal) ---------- */
+function verAvisoPrivacidad(){
+  const sop = (typeof soporte==='function') ? soporte() : {};
+  modal(`<h3>🔒 Aviso de privacidad y uso del sistema</h3>
+  <div style="font-size:13px;line-height:1.75;color:var(--ink-2);max-height:62vh;overflow:auto;margin-top:8px">
+    <p><b>Responsable:</b> Unifrutti Perú (VERFRUT S.A.C. / RAPEL S.A.C.), a través de la Coordinación de Relaciones Laborales – Gestión Humana.</p>
+    <p><b>Finalidad:</b> medir el clima laboral, elaborar indicadores y planes de mejora del ambiente de trabajo. No se usa para evaluar ni sancionar a quien responde.</p>
+    <p><b>Encuesta anónima:</b> no se solicita nombre, DNI ni firma. Se registran sector, área, jefe evaluado, tiempo en la empresa, tipo de trabajador, respuestas, fecha y hora. Los resultados se presentan de forma agregada; con menos de 5 respuestas se muestran solo como referencia.</p>
+    <p><b>Usuarios del sistema:</b> para la seguridad de la información se registran ingresos, salidas, equipo utilizado y acciones realizadas (bitácora), en el marco de la relación laboral y de las facultades de dirección del empleador.</p>
+    <p><b>Almacenamiento:</b> la información se guarda en servicios en la nube de Google (Google Sheets / Apps Script y Firebase) y GitHub, cuyos servidores pueden ubicarse fuera del Perú (flujo transfronterizo), con acceso restringido por usuario y contraseña.</p>
+    <p><b>Conservación:</b> mientras sea necesaria para el análisis histórico del clima laboral o hasta que la empresa disponga su eliminación.</p>
+    <p><b>Derechos:</b> puede ejercer sus derechos de acceso, rectificación, cancelación y oposición (Ley N.° 29733 y su Reglamento, D.S. N.° 016-2024-JUS) ante la Coordinación de Relaciones Laborales${sop.correo? ' ('+pcEsc(sop.correo)+')' : ''}.</p>
+    <p style="border-left:3px solid #e11d2e;padding-left:10px"><b>🚨 Denuncias:</b> esta encuesta <b>no reemplaza</b> una denuncia formal. Si desea denunciar hostigamiento sexual (Ley N.° 27942), acoso, violencia u otra falta grave, utilice el canal oficial de denuncias de la empresa o acuda a Gestión Humana.</p>
+    <p class="small muted">Texto preliminar sujeto a validación del área Legal de la empresa.</p>
+  </div>
+  <div class="flex mt16" style="justify-content:flex-end"><button class="btn btn-p" onclick="closeModal()">Entendido</button></div>`);
+}
+
+/* ---------- Alerta de posible hostigamiento / violencia en comentarios ---------- */
+const PALABRAS_GRAVES = ['hostig','acoso','acosa','tocamiento','toca ','manose','abuso','abusa','violencia','violen','golpe','amenaz','agresi','insulto','discrimin','chantaje','favores sexual','insinua'];
+function comentarioGrave(txt){ const t = cbNorm(txt); return !!t && PALABRAS_GRAVES.some(p=> t.includes(p)); }
+(function(){
+  const _a = window.fbAReg;
+  window.fbAReg = function(d){
+    const reg = _a.apply(this, arguments);
+    try{
+      const txt = [d.ab1, d.ab2, d.ab3].filter(Boolean).join(' ');
+      if(reg && comentarioGrave(txt)){
+        reg.alertaGrave = true;
+        if(window.__fbPrimeraCarga && SESSION && accesoVista(NAV.find(x=>x.id==='reportes')))
+          toast('🚨 Una encuesta de '+(d.sector||'—')+' contiene un comentario que podría referirse a hostigamiento o violencia. Revíselo en Resultados y active el procedimiento correspondiente.','err');
+      }
+    }catch(e){}
+    return reg;
+  };
+})();
+
+/* ---------- cambio de contraseña inicial: obligatorio en producción ---------- */
+function pedirCambioPass(){
+  modal(`<h3>🔐 Cambio de contraseña obligatorio</h3>
+  <p class="muted small" style="margin:8px 0 14px">Por seguridad debe reemplazar la contraseña inicial antes de usar el sistema (mínimo 8 caracteres, con mayúscula, minúscula y número).</p>
+  <label>Nueva contraseña</label><input type="password" id="np1" placeholder="••••••••••••">
+  <div style="height:10px"></div><label>Confirmar contraseña</label><input type="password" id="np2">
+  <div class="flex mt16" style="justify-content:flex-end"><button class="btn btn-p" onclick="cambiarPass()">Guardar contraseña</button></div>`);
+}
+(function(){
+  const _nav = window.nav;
+  window.nav = function(v){
+    if(SESSION && SESSION.debeCambiar && window.PROD && !window.PROD_DEMO){ pedirCambioPass(); return; }
+    return _nav.apply(this, arguments);
+  };
+})();
+setInterval(function(){
+  if(SESSION && SESSION.debeCambiar && window.PROD && !window.PROD_DEMO && !document.querySelector('#np1')) pedirCambioPass();
+}, 4000);
+/* tras cambiar la contraseña inicial, se muestra la bienvenida */
+(function(){
+  const _cp = window.cambiarPass;
+  window.cambiarPass = function(){
+    const antes = SESSION && SESSION.debeCambiar;
+    const r = _cp.apply(this, arguments);
+    if(antes && SESSION && !SESSION.debeCambiar && typeof mostrarBienvenida==='function') setTimeout(()=>{ if(!document.querySelector('#modalRoot .modal-back')) mostrarBienvenida(SESSION); }, 700);
+    return r;
+  };
+})();
 
 </script>
 
