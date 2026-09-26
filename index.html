@@ -1306,6 +1306,7 @@ const NAV = [
   {id:'reportes',  ico:'📄', txt:'Resultados y Exportación', roles:['Super Administrador','Administrador','Gerencia']},
   {id:'documentos',ico:'🗂️', txt:'Centro de Documentos', roles:['Super Administrador']},
   {sec:'Administración'},
+  {id:'panel',     ico:'🎛️', txt:'Panel de Control', roles:['Super Administrador']},
   {id:'usuarios',  ico:'👤', txt:'Usuarios', roles:['Super Administrador']},
   {id:'preguntas', ico:'🧩', txt:'Preguntas y Encuestas', roles:['Super Administrador']},
   {id:'accesos',   ico:'⏰', txt:'Control de Acceso', roles:['Super Administrador']},
@@ -1316,10 +1317,16 @@ const NAV = [
 function tienePermisoModulo(user, id){
   return (CONFIG_ACCESO.modulos||[]).some(m=>m.user===user && m.modulo===id);
 }
-function accesoVista(item){
+function accesoVista(item){ return accesoVistaDe(SESSION, item); }
+/* v3.3 — acceso efectivo de cualquier usuario: rol + módulos otorgados − módulos quitados */
+function rolIncluye(u, item){ return !!(u && item && (u.rol==='Super Administrador' || item.roles.includes(u.rol))); }
+function accesoVistaDe(u, item){
   if(!item) return true;
-  if(item.roles.includes('__owner__')) return SESSION.user==='jtimoteo';
-  return item.roles.includes(SESSION.rol) || SESSION.rol==='Super Administrador' || tienePermisoModulo(SESSION.user, item.id);
+  if(!u) return false;
+  if(item.roles.includes('__owner__')) return u.user==='jtimoteo';
+  if(u.user==='jtimoteo') return true;
+  if((CONFIG_ACCESO.denegados||[]).some(d=>d.user===u.user && d.modulo===item.id)) return false;
+  return rolIncluye(u, item) || tienePermisoModulo(u.user, item.id);
 }
 function buildNav(){
   let html='';
@@ -1463,6 +1470,7 @@ const TITULOS = {
   alertas:['Centro de Alertas','Notificaciones y eventos del sistema'],
   reportes:['Reportes Ejecutivos','Documentos con nivel de consultoría'],
   documentos:['Centro de Documentos','Biblioteca documental con versionado'],
+  panel:['Panel de Control','Permisos por módulo, horarios y actividad en tiempo real'],
   usuarios:['Usuarios','Gestión de cuentas, roles y permisos'],
   preguntas:['Preguntas y Encuestas','Editor de dimensiones, preguntas y escalas · sin programar'],
   accesos:['Control de Acceso','Horarios de ingreso, feriados, solicitudes y permisos'],
@@ -1482,7 +1490,7 @@ function render(){
   const R = {dashboard:vDashboard, gerencia:vGerencia, supervisor:vSupervisor, encuesta:vEncuestaApp,
     campanias:vCampanias, qr:vQR, planes:vPlanes, seguimiento:vSeguimiento, calendario:vCalendario,
     ia:vIA, alertas:vAlertas, reportes:vReportes, documentos:vDocumentos, usuarios:vUsuarios,
-    preguntas:vPreguntas, accesos:vAccesos, auditoria:vAuditoria, config:vConfig, sysadmin:vSysadmin};
+    preguntas:vPreguntas, accesos:vAccesos, panel:(typeof vPanel==='function'? vPanel : vAccesos), auditoria:vAuditoria, config:vConfig, sysadmin:vSysadmin};
   $('viewRoot').innerHTML='';
   (R[VIEW]||vDashboard)();
   try{ animarKPIs(); }catch(e){}
@@ -2101,12 +2109,14 @@ function svSubmit(rootId,publico){
     supervisor: s.datos.supervisor || supervisorDe(s.datos.sector), jefe:s.datos.jefe, tiempo:s.datos.tiempo, tipo:s.datos.tipo,
     fecha:new Date().toISOString().slice(0,10), dur:Math.round((Date.now()-s.inicio)/1000),
     resp:s.resp, comentario:coment, tema: coment? detectarTema(coment) : null, abiertas:s.abiertas,
+    canal: publico ? 'QR trabajador' : 'Asistida', usuario: SESSION ? SESSION.user : '',
     uid: nuevoUid(), instrumento: (function(){ const i=instrumentoActivo(); return i? i.id+' · '+i.nombre : ''; })(),
   };
   DB.encuestas.push(reg);
   auditar('Encuesta registrada','Encuestas',`${s.datos.sector} · ${camp.nombre} · anónima`);
   s.done=true; s.paso=DIMENSIONES.length+2;
   renderSurvey(rootId,publico);
+  if(typeof fbPublicarEncuesta==='function') fbPublicarEncuesta(reg); // v3.3 — aviso instantáneo (Firebase)
   if(window.PROD && typeof prodEnviar==='function'){ prodEnviar(reg); }
   else toast('✅ Encuesta registrada. Indicadores actualizados en tiempo real (modo demostración).','ok');
 }
@@ -3330,7 +3340,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
    · jtimoteo (propietario) siempre puede ingresar
    ===================================================================== */
 const CONFIG_ACCESO = {
-  horario: { lv:{ini:'06:15',fin:'17:00'}, sab:{ini:'06:15',fin:'15:00'} },
+  horario: { lv:{ini:'05:30',fin:'17:00'}, sab:{ini:'05:30',fin:'15:00'} },
   feriados: [
     {f:'2026-01-01', n:'Año Nuevo'},
     {f:'2026-04-02', n:'Jueves Santo'},
@@ -3354,6 +3364,8 @@ const CONFIG_ACCESO = {
   modulos: [],      // [{user, modulo, otorgadoPor}] — acceso permanente a un módulo restringido
   solicitudes: [],  // [{id, fecha, hora, user, nombre, motivo, tipo, estado}]
   usuarios: [],     // usuarios creados/modificados por el Super Admin — ingresan directo en cualquier dispositivo
+  denegados: [],    // v3.3 [{user, modulo}] — módulos del rol que el Super Admin le quitó a un usuario
+  horariosUsuario: {}, // v3.3 {user:{lv:{ini,fin}, sab:{ini,fin}|null, dom:{ini,fin}|null}} — horario personalizado
 };
 /* aplica los usuarios persistidos sobre el catálogo base (crea nuevos o actualiza clave/rol/estado) */
 function sincronizarUsuarios(){
@@ -3385,7 +3397,7 @@ function upsertUsuarioPersistente(user, cambios){
   try{
     const s = JSON.parse(localStorage.getItem('sigcl_acceso')||'null');
     if(s){
-      ['horario','feriados','permisos','solicitudes','modulos','usuarios','campanias','instrumentos'].forEach(k=>{ if(s[k]) CONFIG_ACCESO[k]=s[k]; });
+      ['horario','feriados','permisos','solicitudes','modulos','usuarios','campanias','instrumentos','denegados','horariosUsuario'].forEach(k=>{ if(s[k]) CONFIG_ACCESO[k]=s[k]; });
       sincronizarUsuarios();
       if(typeof aplicarCampaniasCfg==='function') aplicarCampaniasCfg(s.campanias);
       if(typeof aplicarInstrumentosCfg==='function') aplicarInstrumentosCfg(s.instrumentos);
@@ -3401,13 +3413,14 @@ function aplicarConfigRemota(str){
   try{
     const c = (typeof str==='string')? JSON.parse(str) : str;
     if(!c) return;
-    ['horario','feriados','permisos','solicitudes','modulos','usuarios','campanias','instrumentos'].forEach(k=>{ if(c[k]) CONFIG_ACCESO[k]=c[k]; });
+    ['horario','feriados','permisos','solicitudes','modulos','usuarios','campanias','instrumentos','denegados','horariosUsuario'].forEach(k=>{ if(c[k]) CONFIG_ACCESO[k]=c[k]; });
     sincronizarUsuarios();
     aplicarCampaniasCfg(c.campanias);
     aplicarInstrumentosCfg(c.instrumentos);
     /* v3.2 — foto de lo recibido: al guardar solo se envían las claves que este equipo cambió */
     window.__CFG_SNAP = window.__CFG_SNAP || {};
     Object.keys(c).forEach(function(k){ window.__CFG_SNAP[k] = JSON.stringify(c[k]); });
+    if(typeof SESSION!=='undefined' && SESSION){ try{ buildNav(); }catch(e){} }
     try{ localStorage.setItem('sigcl_acceso', JSON.stringify(CONFIG_ACCESO)); }catch(e){}
   }catch(e){}
 }
@@ -3444,13 +3457,20 @@ function estadoAcceso(user, now){
   const fer = CONFIG_ACCESO.feriados.find(x=>x.f===hoy);
   if(fer) return {ok:false, tipo:'Feriado', ico:'🎉', msg:`Hoy es feriado — ${fer.n}. El sistema no está disponible. ¡Lo esperamos al retorno de labores!`};
   const dow = now.getDay(); // 0=domingo, 6=sábado
-  if(dow===0) return {ok:false, tipo:'Domingo', ico:'🌙', msg:'Los domingos el sistema no está disponible. Lo esperamos mañana desde las '+CONFIG_ACCESO.horario.lv.ini+' a. m.'};
-  const h = dow===6 ? CONFIG_ACCESO.horario.sab : CONFIG_ACCESO.horario.lv;
+  const hu = user && (CONFIG_ACCESO.horariosUsuario||{})[user]; // v3.3 — horario asignado a ese usuario
+  let h;
+  if(hu){
+    h = dow===0 ? hu.dom : (dow===6 ? hu.sab : hu.lv);
+    if(!h) return {ok:false, tipo: dow===0?'Domingo':'Fuera de horario', ico: dow===0?'🌙':'⏰', msg:'Hoy no tiene horario de ingreso asignado. ¡Lo esperamos en su próximo turno!'};
+  } else {
+    if(dow===0) return {ok:false, tipo:'Domingo', ico:'🌙', msg:'Los domingos el sistema no está disponible. Lo esperamos mañana desde las '+CONFIG_ACCESO.horario.lv.ini+' a. m.'};
+    h = dow===6 ? CONFIG_ACCESO.horario.sab : CONFIG_ACCESO.horario.lv;
+  }
   const min = now.getHours()*60 + now.getMinutes();
   const a = h.ini.split(':'), b = h.fin.split(':');
   const ini = +a[0]*60 + +a[1], fin = +b[0]*60 + +b[1];
   if(min < ini || min > fin){
-    const rango = (dow===6? 'sábados ' : 'lunes a viernes ') + h.ini + ' – ' + h.fin;
+    const rango = (dow===0? 'domingos ' : dow===6? 'sábados ' : 'lunes a viernes ') + h.ini + ' – ' + h.fin;
     return {ok:false, tipo:'Fuera de horario', ico:'⏰', msg:`Está fuera del horario permitido (${rango}). ¡Lo esperamos mañana!`};
   }
   return {ok:true};
@@ -3576,8 +3596,8 @@ function vAccesos(){
   </div>`;
 }
 function guardarHorario(){
-  CONFIG_ACCESO.horario.lv  = {ini:$('hLvIni').value||'06:15', fin:$('hLvFin').value||'17:00'};
-  CONFIG_ACCESO.horario.sab = {ini:$('hSabIni').value||'06:15', fin:$('hSabFin').value||'15:00'};
+  CONFIG_ACCESO.horario.lv  = {ini:$('hLvIni').value||'05:30', fin:$('hLvFin').value||'17:00'};
+  CONFIG_ACCESO.horario.sab = {ini:$('hSabIni').value||'05:30', fin:$('hSabFin').value||'15:00'};
   guardarAcceso();
   auditar('Modificó horario de ingreso','Control de Acceso', `L-V ${CONFIG_ACCESO.horario.lv.ini}-${CONFIG_ACCESO.horario.lv.fin} · Sáb ${CONFIG_ACCESO.horario.sab.ini}-${CONFIG_ACCESO.horario.sab.fin}`);
   render(); toast('✅ Horario actualizado.','ok');
@@ -3695,6 +3715,7 @@ function actualizarDatos(manual, done){
       if(r && Array.isArray(r.filas)){
         DB.encuestas.length = 0;
         r.filas.forEach(function(f,i){ const reg = prodParseFila(f,i); if(reg) DB.encuestas.push(reg); });
+        if(typeof fbReinyectar==='function') fbReinyectar();
         try{ initLandingStats(); }catch(e){}
         /* no re-dibujar si hay una encuesta en curso dentro de la app, ni mientras el usuario escribe */
         const ae = document.activeElement;
@@ -3715,6 +3736,8 @@ window.__VER = null; window.__verOK = null; window.__ultSync = Date.now();
 function sondeoVivo(){
   if(!window.PROD || window.PROD_DEMO || !SESSION || document.hidden) return;
   if(VIEW==='encuesta' && SURVEY && !SURVEY.done && SURVEY.paso>0) return; // no interrumpir una encuesta en curso
+  if(window.FB_VIVO && Date.now()-(window.__ultVer||0) < 60000) return; // v3.3 — Firebase ya avisa al instante
+  window.__ultVer = Date.now();
   if(window.__verOK===false){
     if(Date.now()-window.__ultSync >= 90000){ window.__ultSync = Date.now(); actualizarDatos(false); }
     return;
@@ -3784,8 +3807,10 @@ function apiConfigPush(){
     if(!snap || snap[k]!==j) parcial[k] = CONFIG_ACCESO[k];
   });
   if(snap && !Object.keys(parcial).length) return;
+  if((parcial.campanias || parcial.instrumentos) && typeof fbPublicarConfigPublica==='function') fbPublicarConfigPublica();
   const body = JSON.stringify({tipo:'config', config: JSON.stringify(CONFIG_ACCESO), parcial: parcial});
   apiGuardar(body, function(r){
+    if(r && r.ok && typeof fbAvisarConfig==='function') fbAvisarConfig();
     if(r && r.ok){ window.__CFG_SNAP = window.__CFG_SNAP || {}; Object.keys(parcial).forEach(function(k){ window.__CFG_SNAP[k] = JSON.stringify(parcial[k]); }); }
   }, function(){ /* reintento en el próximo guardado */ });
 }
@@ -3798,7 +3823,7 @@ function prodParseFila(f,i){
       fecha:f.fecha||'', dur:+f.dur||0,
       resp: (typeof f.resp==='string' && f.resp)? JSON.parse(f.resp) : (f.resp||{}),
       comentario:f.comentario||'', tema: f.comentario? detectarTema(f.comentario):null,
-      uid:f.uid||'', instrumento:f.instrumento||'', hora:f.hora||'',
+      uid:f.uid||'', instrumento:f.instrumento||'', hora:f.hora||'', canal:f.canal||'', usuario:f.usuario||'',
     };
   }catch(e){ return null; }
 }
@@ -3825,7 +3850,7 @@ function prodPayload(reg){
     dur:reg.dur, lid:dims.lid, com:dims.com, res:dims.res, equ:dims.equ, cli:dims.cli,
     general: Math.round(scoreEnc(reg)*10)/10, resp: JSON.stringify(reg.resp),
     ab1:(reg.abiertas&&reg.abiertas[0])||'', ab2:(reg.abiertas&&reg.abiertas[1])||'', ab3:(reg.abiertas&&reg.abiertas[2])||'',
-    id: reg.uid||'', instrumento: reg.instrumento||'',
+    id: reg.uid||'', instrumento: reg.instrumento||'', canal: reg.canal||'', usuario: reg.usuario||'',
   };
 }
 function prodGuardarPendiente(reg){
@@ -3865,7 +3890,9 @@ function iniciarEncuestaQR(){
   let listo = false;
   const arrancar = function(){ if(listo) return; listo = true; startSurveyPublic(); try{ prodReintentarPendientes(); }catch(e){} };
   setTimeout(arrancar, 9000);
-  apiEncuestaPublica(function(r){ try{ if(r && r.config) aplicarConfigRemota(r.config); }catch(e){} arrancar(); }, arrancar);
+  const recibir = function(r){ if(listo) return; try{ if(r && r.config) aplicarConfigRemota(r.config); }catch(e){} arrancar(); };
+  if(typeof fbLeerConfigPublica==='function') fbLeerConfigPublica(function(r){ if(r) recibir(r); });
+  apiEncuestaPublica(recibir, arrancar);
 }
 function apiEncuestaPublica(ok, err){
   if(API_MODE==='gas'){ google.script.run.withSuccessHandler(ok).withFailureHandler(err).obtenerDatos(); return; }
@@ -4009,6 +4036,426 @@ function historialEncuestasHTML(){
   </div>`;
 }
 </script>
+<script>
+/* =====================================================================
+   v3.3 — FIREBASE FIRESTORE (plan gratuito Spark) · TIEMPO REAL
+   · Cada encuesta enviada se publica al instante en «vivo_encuestas»
+     (el celular la guarda aunque no tenga señal y la envía al volver).
+   · Los administradores escuchan esa colección: los indicadores se
+     actualizan en ~1 s, sin consultar la hoja cada pocos segundos.
+   · «presencia» y «actividad»: quién está conectado, quién ingresa,
+     quién envía encuestas.
+   · «publico/encuesta»: campañas + preguntas vigentes para el QR.
+   Google Sheets (Apps Script) sigue siendo la base oficial y respaldo.
+   Sin configuración en config.js todo funciona como antes.
+   ===================================================================== */
+window.FB = null; window.FB_OK = false; window.FB_VIVO = false;
+window.FEED_VIVO = []; window.PRESENCIA = []; window.ACTIVIDAD = [];
+const FB_SDK = 'https://www.gstatic.com/firebasejs/10.12.2/';
+function fbConfigurado(){ const c = window.SIGCL_FIREBASE; return !!(c && c.apiKey && c.projectId); }
+function fbCargar(){
+  if(window.__fbProm) return window.__fbProm;
+  if(!fbConfigurado()) return (window.__fbProm = Promise.resolve(null));
+  const cargar = src => new Promise((ok, err)=>{ const sc = document.createElement('script'); sc.src = src; sc.onload = ok; sc.onerror = err; document.head.appendChild(sc); });
+  window.__fbProm = cargar(FB_SDK+'firebase-app-compat.js')
+    .then(()=> Promise.all([cargar(FB_SDK+'firebase-auth-compat.js'), cargar(FB_SDK+'firebase-firestore-compat.js')]))
+    .then(()=>{
+      if(!firebase.apps.length) firebase.initializeApp(window.SIGCL_FIREBASE);
+      const db = firebase.firestore();
+      try{ db.enablePersistence({synchronizeTabs:true}).catch(function(){}); }catch(e){}
+      return firebase.auth().signInAnonymously().then(function(){ window.FB = db; window.FB_OK = true; return db; });
+    })
+    .catch(function(e){ console.warn('SIGCL · Firebase no disponible:', e && e.message || e); window.FB_OK = false; return null; });
+  return window.__fbProm;
+}
+const fbTs = () => firebase.firestore.FieldValue.serverTimestamp();
+function dispositivoTxt(){
+  const ua = navigator.userAgent;
+  const so = /android/i.test(ua)?'Android':/iphone|ipad/i.test(ua)?'iOS':/windows/i.test(ua)?'Windows':/mac/i.test(ua)?'Mac':'Otro';
+  const tipo = /mobi|iphone|android/i.test(ua) ? (/tablet|ipad/i.test(ua)?'Tablet':'Celular') : 'PC';
+  return tipo + ' · ' + so;
+}
+
+/* ---------- publicar ---------- */
+function fbPublicarEncuesta(reg){
+  fbCargar().then(function(db){
+    if(!db) return;
+    const p = prodPayload(reg);
+    db.collection('vivo_encuestas').doc(reg.uid).set(Object.assign({}, p, {ts: fbTs(), creado: Date.now(), disp: dispositivoTxt()}))
+      .catch(function(e){ console.warn('vivo_encuestas', e); });
+    if(SESSION) fbActividad('Envió encuesta', (reg.sector||'') + ' · ' + (reg.canal||''));
+  });
+}
+function fbActividad(evento, detalle, usr){
+  fbCargar().then(function(db){
+    if(!db) return;
+    const u = usr || SESSION || {};
+    db.collection('actividad').add({ts: fbTs(), creado: Date.now(), user: u.user||'—', nombre: u.nombre||'', rol: u.rol||'',
+      evento: evento, detalle: detalle||'', disp: dispositivoTxt()}).catch(function(){});
+  });
+}
+function fbPresencia(estado){
+  if(!SESSION) return;
+  const u = SESSION;
+  fbCargar().then(function(db){
+    if(!db) return;
+    db.collection('presencia').doc(u.user).set({user:u.user, nombre:u.nombre||'', rol:u.rol||'', estado: estado,
+      vista: (typeof VIEW!=='undefined'? VIEW : ''), disp: dispositivoTxt(), ts: fbTs(), creado: Date.now(), desde: window.__sesIni || Date.now()}, {merge:true})
+      .catch(function(){});
+  });
+}
+function fbPublicarConfigPublica(){
+  if(window.__CFG_PUBLICO) return;
+  const datos = JSON.stringify({campanias: CONFIG_ACCESO.campanias || null, instrumentos: CONFIG_ACCESO.instrumentos || null});
+  if(datos === window.__fbPubUlt) return;
+  window.__fbPubUlt = datos;
+  fbCargar().then(function(db){
+    if(!db) return;
+    db.collection('publico').doc('encuesta').set({config: datos, ts: fbTs()}).catch(function(){ window.__fbPubUlt = null; });
+  });
+}
+/* aviso a los demás equipos: «la configuración cambió» (permisos, horarios, preguntas…) */
+function fbAvisarConfig(){
+  fbCargar().then(function(db){
+    if(!db) return;
+    window.__miSenal = nuevoUid();
+    db.collection('senales').doc('config').set({ts: fbTs(), por: window.__miSenal}).catch(function(){});
+  });
+}
+/* QR: lectura de campañas + preguntas desde Firebase (null si no existe o falla) */
+function fbLeerConfigPublica(cb){
+  if(!fbConfigurado()) return cb(null);
+  fbCargar().then(function(db){
+    if(!db) return cb(null);
+    db.collection('publico').doc('encuesta').get({source:'server'})
+      .then(function(d){ cb(d.exists && d.data().config ? {config: d.data().config} : null); })
+      .catch(function(){ cb(null); });
+  });
+}
+
+/* ---------- escuchar (administradores) ---------- */
+function fbAReg(d){
+  const reg = prodParseFila({campania:d.campania, empresa:d.empresa, sector:d.sector, area:d.area, supervisor:d.supervisor, jefe:d.jefe,
+    tiempo:d.tiempo, tipo:d.tipo, fecha:d.fecha, dur:d.dur, resp:d.resp, comentario:[d.ab1,d.ab2,d.ab3].filter(Boolean).join(' | '),
+    uid:d.id, instrumento:d.instrumento, hora:d.hora, canal:d.canal, usuario:d.usuario, fila:0}, 0);
+  if(reg){ reg.fila = 0; reg.id = DB.encuestas.reduce((m,e)=>Math.max(m, +e.id||0), 0) + 1; }
+  return reg;
+}
+/* tras releer la hoja: vuelve a agregar las que llegaron por Firebase y aún no están en Sheets */
+function fbReinyectar(){
+  const lim = Date.now() - 10*60000;
+  (window.FEED_VIVO||[]).forEach(function(d){
+    if((d.creado||0) < lim || !d.id) return;
+    if(DB.encuestas.some(e=>e.uid===d.id)) return;
+    const reg = fbAReg(d); if(reg) DB.encuestas.push(reg);
+  });
+}
+function fbEscuchar(){
+  if(!SESSION || window.__fbEscuchando || !window.PROD || window.PROD_DEMO) return;
+  fbCargar().then(function(db){
+    if(!db || window.__fbEscuchando || !SESSION) return;
+    window.__fbEscuchando = [];
+    const desde = firebase.firestore.Timestamp.fromMillis(Date.now() - 12*3600000); // últimas 12 h
+    window.__fbEscuchando.push(db.collection('vivo_encuestas').where('ts','>=',desde).onSnapshot(function(snap){
+      window.FB_VIVO = true; try{ marcarVivo(true); }catch(e){}
+      let nuevas = 0, ultima = null;
+      snap.docChanges().forEach(function(ch){
+        if(ch.type!=='added') return;
+        const d = ch.doc.data();
+        if(!window.FEED_VIVO.some(x=>x.id===d.id)) window.FEED_VIVO.unshift(d);
+        if(!d.id || DB.encuestas.some(e=>e.uid===d.id)) return;
+        const reg = fbAReg(d); if(!reg) return;
+        DB.encuestas.push(reg); nuevas++; ultima = d;
+      });
+      window.FEED_VIVO.sort((a,b)=>(b.creado||0)-(a.creado||0)); window.FEED_VIVO.length = Math.min(window.FEED_VIVO.length, 200);
+      if(nuevas){
+        try{ initLandingStats(); }catch(e){}
+        refrescarVistaViva();
+        if(!snap.metadata.hasPendingWrites && window.__fbPrimeraCarga)
+          toast('⚡ '+(nuevas===1? 'Nueva encuesta' : nuevas+' encuestas nuevas')+(ultima? ' · '+(ultima.sector||'')+' · '+(ultima.canal||'') : '')+' — en vivo.','ok');
+      } else if(VIEW==='panel') refrescarVistaViva();
+      window.__fbPrimeraCarga = true;
+    }, function(e){ window.FB_VIVO = false; console.warn('escucha vivo_encuestas', e); }));
+    /* cambios de configuración hechos por el administrador: se aplican en ~1 s en este equipo */
+    let senalIni = false;
+    window.__fbEscuchando.push(db.collection('senales').onSnapshot(function(snap){
+      snap.docChanges().forEach(function(ch){
+        const d = ch.doc.data();
+        if(!senalIni || ch.doc.id!=='config' || d.por===window.__miSenal) return;
+        try{ actualizarDatos(false); }catch(e){}
+      });
+      senalIni = true;
+    }, function(){}));
+    if(accesoVista(NAV.find(x=>x.id==='panel'))){
+      window.__fbEscuchando.push(db.collection('presencia').onSnapshot(function(snap){
+        window.PRESENCIA = snap.docs.map(d=>d.data());
+        if(VIEW==='panel') pcPintarVivo();
+      }, function(){}));
+      window.__fbEscuchando.push(db.collection('actividad').orderBy('ts','desc').limit(60).onSnapshot(function(snap){
+        window.ACTIVIDAD = snap.docs.map(d=>d.data());
+        if(VIEW==='panel') pcPintarVivo();
+      }, function(){}));
+    }
+  });
+}
+function fbDejarDeEscuchar(){
+  (window.__fbEscuchando||[]).forEach(function(u){ try{ u(); }catch(e){} });
+  window.__fbEscuchando = null; window.FB_VIVO = false; window.__fbPrimeraCarga = false;
+}
+/* redibuja sin interrumpir: nunca durante una encuesta en curso ni mientras se escribe */
+function refrescarVistaViva(){
+  if(!SESSION) return;
+  if(VIEW==='encuesta') return;
+  if(VIEW==='panel'){ pcPintarVivo(); return; }
+  const ae = document.activeElement;
+  if(ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) return;
+  if(document.querySelector('#modalRoot .modal-back')) return;
+  render();
+}
+
+/* ---------- sesión: ingreso, salida, latido y horario ---------- */
+(function(){
+  const _ini = window.iniciarSesion;
+  window.iniciarSesion = function(usr){
+    const r = _ini.apply(this, arguments);
+    try{
+      window.__sesIni = Date.now();
+      /* si el administrador le quitó el módulo de inicio, abre el primero permitido */
+      const it = NAV.find(x=>x.id===VIEW);
+      if(it && !accesoVista(it)){ const p = NAV.find(x=>!x.sec && accesoVista(x)); if(p){ VIEW = p.id; render(); } }
+      fbActividad('Ingresó al sistema', '', usr);
+      fbPresencia('En línea');
+      fbEscuchar();
+    }catch(e){}
+    return r;
+  };
+  const _out = window.logout;
+  window.logout = function(){
+    try{ if(SESSION){ fbActividad('Salió del sistema', '', SESSION); fbPresencia('Desconectado'); } fbDejarDeEscuchar(); }catch(e){}
+    return _out.apply(this, arguments);
+  };
+  const _bloq = window.mostrarBloqueo;
+  window.mostrarBloqueo = function(acc, usr){
+    try{ fbActividad('Intento fuera de horario', acc && acc.tipo || '', usr || {user:'—'}); }catch(e){}
+    return _bloq.apply(this, arguments);
+  };
+})();
+setInterval(function(){ if(SESSION && !document.hidden) fbPresencia('En línea'); }, 120000); // latido cada 2 min
+/* v3.3 — control de horario durante la sesión (cada minuto) y permisos actualizados en vivo */
+setInterval(function(){
+  if(!SESSION){ if(window.__fbEscuchando) fbDejarDeEscuchar(); return; }
+  if(!window.PROD || window._skipAcc || SESSION.user==='jtimoteo') return;
+  const it = NAV.find(x=>x.id===VIEW);
+  if(it && !accesoVista(it)){
+    const p = NAV.find(x=>!x.sec && accesoVista(x));
+    if(p && !(VIEW==='encuesta' && SURVEY && !SURVEY.done && SURVEY.paso>0)){
+      VIEW = p.id; render(); toast('🔐 El administrador actualizó sus permisos de acceso.','warn');
+    }
+  }
+  const a = estadoAcceso(SESSION.user);
+  if(!a.ok){
+    if(VIEW==='encuesta' && SURVEY && !SURVEY.done && SURVEY.paso>0) return; // deja terminar la encuesta en curso
+    fbActividad('Sesión cerrada por horario', a.tipo||'', SESSION);
+    auditar('Sesión cerrada por horario','Control de Acceso', a.tipo||'');
+    fbPresencia('Desconectado'); fbDejarDeEscuchar();
+    SESSION = null; go('login');
+    modal(`<div style="text-align:center"><div style="font-size:50px">${a.ico||'⏰'}</div><h3 style="margin:6px 0">Terminó su horario de ingreso</h3>
+      <p class="muted">${a.msg||''}</p><div class="flex mt16" style="justify-content:center"><button class="btn btn-p" onclick="closeModal()">Entendido</button></div></div>`);
+  }
+}, 60000);
+
+/* =====================================================================
+   v3.3 — PANEL DE CONTROL (solo Super Administrador o quien él autorice)
+   ===================================================================== */
+const pcEsc = t => String(t==null?'':t).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function pcUsuarios(){ return USUARIOS.filter(u=>u.user!=='jtimoteo'); }
+function pcModulos(){ return NAV.filter(x=>!x.sec && x.id!=='sysadmin'); }
+function pcHorarioTxt(user){
+  const h = (CONFIG_ACCESO.horariosUsuario||{})[user];
+  const g = CONFIG_ACCESO.horario;
+  if(!h) return `<span class="muted">General</span> <span class="small muted">L-V ${g.lv.ini}–${g.lv.fin} · Sáb ${g.sab.ini}–${g.sab.fin}</span>`;
+  return `<b>Personalizado</b> <span class="small muted">L-V ${h.lv? h.lv.ini+'–'+h.lv.fin : '—'} · Sáb ${h.sab? h.sab.ini+'–'+h.sab.fin : '—'} · Dom ${h.dom? h.dom.ini+'–'+h.dom.fin : '—'}</span>`;
+}
+function hace(ms){
+  if(!ms) return '—';
+  const s = Math.max(0, Math.round((Date.now()-ms)/1000));
+  return s<60? 'hace '+s+' s' : s<3600? 'hace '+Math.round(s/60)+' min' : 'hace '+Math.round(s/3600)+' h';
+}
+function tsMs(d){ return (d && d.ts && d.ts.toMillis) ? d.ts.toMillis() : (d && d.creado) || 0; }
+function vPanel(){
+  const us = pcUsuarios(), mods = pcModulos(), hoy = fechaHoy();
+  const encHoy = DB.encuestas.filter(e=>e.fecha===hoy);
+  const nQR = encHoy.filter(e=>/QR/i.test(e.canal||'')).length;
+  $('viewRoot').innerHTML = `
+  <div class="flex between wrap mb16">
+    <div><h3 class="view-title">🎛️ Panel de Control</h3>
+    <div class="view-sub">Usted decide qué módulos ve cada usuario y en qué horario puede ingresar · actividad del sistema en tiempo real</div></div>
+    <div class="flex wrap no-print"><span class="chip chip-neutral" id="pcFbChip">—</span></div>
+  </div>
+
+  <div class="mb16" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px">
+    <div class="card" style="margin:0"><div class="small muted">👥 Usuarios</div><div style="font-size:26px;font-weight:800">${us.length}</div><div class="small muted">${us.filter(u=>u.estado!=='Bloqueado').length} activos</div></div>
+    <div class="card" style="margin:0"><div class="small muted">🟢 En línea ahora</div><div style="font-size:26px;font-weight:800" id="pcKOn">—</div><div class="small muted">últimos 5 minutos</div></div>
+    <div class="card" style="margin:0"><div class="small muted">🔑 Ingresos hoy</div><div style="font-size:26px;font-weight:800" id="pcKIng">—</div><div class="small muted">inicios de sesión</div></div>
+    <div class="card" style="margin:0"><div class="small muted">📝 Encuestas hoy</div><div style="font-size:26px;font-weight:800" id="pcKEnc">${encHoy.length}</div><div class="small muted" id="pcKEncSub">${nQR} por QR · ${encHoy.length-nQR} asistidas</div></div>
+  </div>
+
+  <div class="card mb16" style="border-left:4px solid var(--st-exc,#16a34a)">
+    <div class="card-h">⚡ Actividad en tiempo real</div>
+    <div class="card-sub">Quién está conectado, quién ingresa y qué encuestas van llegando (QR del trabajador o asistida por el supervisor)</div>
+    <div id="pcVivo" class="mt8"></div>
+  </div>
+
+  <div class="card mb16" style="border-left:4px solid var(--brand-400)">
+    <div class="card-h">👥 Usuarios · módulos y horario</div>
+    <div class="card-sub">Presione ⚙️ para marcar o quitar módulos y asignar su horario de ingreso. Los cambios llegan a su equipo en segundos.</div>
+    <div style="overflow:auto;margin-top:8px"><table class="tbl">
+      <thead><tr><th>Usuario</th><th>Rol</th><th>Módulos</th><th>Horario de ingreso</th><th>Estado</th><th></th></tr></thead><tbody>
+      ${us.map(u=>{
+        const n = mods.filter(m=>accesoVistaDe(u,m)).length;
+        const extra = (CONFIG_ACCESO.modulos||[]).filter(m=>m.user===u.user).length, quit = (CONFIG_ACCESO.denegados||[]).filter(m=>m.user===u.user).length;
+        return `<tr><td><b>${pcEsc(u.nombre)}</b><div class="small muted">${pcEsc(u.user)}</div></td><td>${pcEsc(u.rol)}</td>
+          <td><b>${n}</b> de ${mods.length}${extra? ` <span class="chip chip-info">+${extra}</span>`:''}${quit? ` <span class="chip chip-cri">−${quit}</span>`:''}</td>
+          <td>${pcHorarioTxt(u.user)}</td>
+          <td>${u.estado==='Bloqueado'? '<span class="chip chip-cri">Bloqueado</span>' : '<span class="chip chip-exc">Activo</span>'}</td>
+          <td class="no-print" style="text-align:right"><button class="btn btn-o btn-sm" onclick="pcEditar('${pcEsc(u.user)}')">⚙️ Configurar</button></td></tr>`;
+      }).join('')}
+      </tbody></table></div>
+  </div>
+
+  <div class="charts-grid">
+    <div class="card span6"><div class="card-h">⏰ Horario general de ingreso</div>
+      <div class="card-sub">Se aplica a quien no tenga horario personalizado. Domingos y feriados sin acceso.</div>
+      <table class="tbl">
+        <tr><td class="b">Lunes a viernes</td><td><div class="flex"><input type="time" id="hLvIni" value="${CONFIG_ACCESO.horario.lv.ini}" style="max-width:120px"> – <input type="time" id="hLvFin" value="${CONFIG_ACCESO.horario.lv.fin}" style="max-width:120px"></div></td></tr>
+        <tr><td class="b">Sábados</td><td><div class="flex"><input type="time" id="hSabIni" value="${CONFIG_ACCESO.horario.sab.ini}" style="max-width:120px"> – <input type="time" id="hSabFin" value="${CONFIG_ACCESO.horario.sab.fin}" style="max-width:120px"></div></td></tr>
+      </table>
+      <button class="btn btn-p btn-sm mt16" onclick="guardarHorario()">💾 Guardar horario general</button>
+      <div class="small muted mt8">Feriados, canjes y solicitudes de acceso: módulo <a href="#" onclick="nav('accesos');return false">⏰ Control de Acceso</a>.</div>
+    </div>
+    <div class="card span6"><div class="card-h">🔥 Conexión en tiempo real</div>
+      ${fbConfigurado()
+        ? `<p class="small" style="line-height:1.9">Proyecto Firebase: <b>${pcEsc(window.SIGCL_FIREBASE.projectId)}</b><br>Estado: <span id="pcFbEstado">⏳ conectando…</span><br>
+           Respaldo oficial: Google Sheets «Base de Clima Laboral» (sin cambios).</p>`
+        : `<p class="small" style="line-height:1.9">Aún no se configuró Firebase: el sistema funciona con Google Sheets (consulta cada 10 s).<br>
+           Para activar el tiempo real gratuito, pegue la configuración de su proyecto Firebase en <b>config.js</b> (<code>window.SIGCL_FIREBASE</code>).</p>`}
+    </div>
+  </div>`;
+  pcPintarVivo();
+}
+function pcPintarVivo(){
+  const box = $('pcVivo'); if(!box) return;
+  const ahora = Date.now(), hoy = fechaHoy();
+  const pres = (window.PRESENCIA||[]).map(p=>Object.assign({}, p, {_ms: tsMs(p)}));
+  const online = pres.filter(p=>p.estado==='En línea' && ahora-p._ms < 5*60000).sort((a,b)=>b._ms-a._ms);
+  const act = (window.ACTIVIDAD||[]);
+  const ingresosHoy = act.filter(a=>a.evento==='Ingresó al sistema' && fechaHoy(new Date(tsMs(a)))===hoy).length;
+  /* encuestas: las del flujo en vivo + las de hoy en la base */
+  const vistos = {}; const llegadas = [];
+  (window.FEED_VIVO||[]).forEach(d=>{ vistos[d.id]=1; llegadas.push({sector:d.sector, canal:d.canal, usuario:d.usuario, jefe:d.jefe, hora:d.hora, ms:d.creado||0, general:d.general}); });
+  DB.encuestas.filter(e=>e.fecha===hoy && !(e.uid && vistos[e.uid])).forEach(e=>llegadas.push({sector:e.sector, canal:e.canal, usuario:e.usuario, jefe:e.jefe, hora:e.hora, ms:0, general:pct(scoreEnc(e))}));
+  llegadas.sort((a,b)=> (b.ms||0)-(a.ms||0) || String(b.hora||'').localeCompare(String(a.hora||'')));
+  const encHoy = DB.encuestas.filter(e=>e.fecha===hoy), nQR = encHoy.filter(e=>/QR/i.test(e.canal||'')).length;
+  const put = (id, v) => { const n = $(id); if(n) n.textContent = v; };
+  put('pcKOn', window.FB_VIVO ? online.length : '—');
+  put('pcKIng', window.FB_VIVO ? ingresosHoy : '—');
+  put('pcKEnc', encHoy.length);
+  put('pcKEncSub', nQR+' por QR · '+(encHoy.length-nQR)+' asistidas');
+  const chip = $('pcFbChip'); if(chip){ chip.textContent = window.FB_VIVO?'⚡ Tiempo real activo (Firebase)':(fbConfigurado()?'⏳ Conectando a Firebase…':'○ Firebase sin configurar'); chip.className = 'chip '+(window.FB_VIVO?'chip-exc':'chip-neutral'); }
+  put('pcFbEstado', window.FB_VIVO? '🟢 conectado — las encuestas llegan al instante' : '⏳ conectando…');
+  const icoEv = ev => /Ingres/.test(ev)?'🔑':/Sali/.test(ev)?'🚪':/encuesta/i.test(ev)?'📝':/horario|Intento/i.test(ev)?'⛔':/permiso/i.test(ev)?'🔐':'•';
+  const sinFb = `<p class="small muted">Disponible al activar Firebase (config.js).</p>`;
+  box.innerHTML = `<div class="charts-grid">
+    <div class="card span4" style="margin:0"><div class="card-h">🟢 En línea ahora (${window.FB_VIVO? online.length : '—'})</div>
+      ${!window.FB_VIVO ? sinFb : online.length ? `<table class="tbl">${online.map(p=>`<tr><td><span style="color:#16a34a">●</span> <b>${pcEsc(p.nombre||p.user)}</b><div class="small muted">${pcEsc(p.rol)} · ${pcEsc(p.disp||'')}</div></td>
+        <td class="small muted" style="text-align:right">${pcEsc((TITULOS[p.vista]||[p.vista||''])[0])}<div>${hace(p._ms)}</div></td></tr>`).join('')}</table>` : '<p class="small muted">Nadie conectado en este momento.</p>'}
+    </div>
+    <div class="card span4" style="margin:0"><div class="card-h">🔑 Últimos movimientos</div>
+      ${!window.FB_VIVO ? sinFb : act.length ? `<div style="max-height:320px;overflow:auto"><table class="tbl">${act.slice(0,30).map(a=>`<tr><td>${icoEv(a.evento)} <b>${pcEsc(a.nombre||a.user)}</b> <span class="small">${pcEsc(a.evento)}</span>
+        <div class="small muted">${pcEsc(a.detalle||'')}${a.disp? ' · '+pcEsc(a.disp):''}</div></td><td class="small muted" style="text-align:right;white-space:nowrap">${hace(tsMs(a))}</td></tr>`).join('')}</table></div>` : '<p class="small muted">Sin movimientos registrados todavía.</p>'}
+    </div>
+    <div class="card span4" style="margin:0"><div class="card-h">📥 Encuestas que van llegando (hoy: ${encHoy.length})</div>
+      ${llegadas.length ? `<div style="max-height:320px;overflow:auto"><table class="tbl">${llegadas.slice(0,40).map(l=>`<tr><td>${/QR/i.test(l.canal||'')?'📱':'🧑‍💼'} <b>${pcEsc(l.sector)}</b>
+        <div class="small muted">${pcEsc(l.canal||'—')}${l.usuario? ' · '+pcEsc(l.usuario):''} · Jefe: ${pcEsc(l.jefe||'—')}</div></td>
+        <td class="small" style="text-align:right;white-space:nowrap"><b style="color:${semaforo(+l.general||0).color}">${l.general!==''&&l.general!=null? l.general+'%':''}</b><div class="muted">${l.ms? hace(l.ms) : pcEsc(String(l.hora||'').slice(0,5))}</div></td></tr>`).join('')}</table></div>` : '<p class="small muted">Aún no llegan encuestas hoy.</p>'}
+    </div>
+  </div>`;
+}
+setInterval(function(){ if(SESSION && VIEW==='panel' && !document.hidden) pcPintarVivo(); }, 30000); // refresca los "hace X min"
+
+function pcEditar(user){
+  if(!accesoVista(NAV.find(x=>x.id==='panel'))) return;
+  const u = USUARIOS.find(x=>x.user===user); if(!u) return;
+  const h = (CONFIG_ACCESO.horariosUsuario||{})[user];
+  const g = CONFIG_ACCESO.horario;
+  const filas = NAV.filter(x=>x.id!=='sysadmin').map(x=>{
+    if(x.sec) return `<div class="b small" style="margin:10px 0 4px;color:var(--ink-2)">${x.sec.toUpperCase()}</div>`;
+    const efectivo = accesoVistaDe(u, x), porRol = rolIncluye(u, x);
+    return `<label style="display:flex;align-items:center;gap:8px;font-weight:500;text-transform:none;letter-spacing:0;padding:3px 0">
+      <input type="checkbox" class="pcMod" data-m="${x.id}" data-rol="${porRol?1:0}" ${efectivo?'checked':''} style="width:auto"> ${x.ico} ${x.txt}
+      ${porRol? '<span class="chip chip-info" style="font-size:10px">por rol</span>' : ''}</label>`;
+  }).join('');
+  const t = (id, v) => `<input type="time" id="${id}" value="${v||''}" style="max-width:115px">`;
+  const lbl = 'display:flex;gap:6px;align-items:center;text-transform:none;letter-spacing:0';
+  modal(`<h3>⚙️ ${pcEsc(u.nombre)} <span class="small muted">(${pcEsc(u.user)} · ${pcEsc(u.rol)})</span></h3>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;margin-top:10px">
+    <div><div class="card-h" style="margin-bottom:4px">🧩 Módulos</div>
+      <div class="flex wrap" style="gap:6px;margin-bottom:6px">
+        <button class="btn btn-ghost btn-sm" onclick="document.querySelectorAll('.pcMod').forEach(c=>c.checked=true)">Marcar todo</button>
+        <button class="btn btn-ghost btn-sm" onclick="document.querySelectorAll('.pcMod').forEach(c=>c.checked=c.dataset.rol==='1')">Solo los del rol</button>
+        <button class="btn btn-ghost btn-sm" onclick="document.querySelectorAll('.pcMod').forEach(c=>c.checked=false)">Quitar todo</button></div>
+      <div style="max-height:52vh;overflow:auto;padding-right:6px">${filas}</div></div>
+    <div><div class="card-h" style="margin-bottom:4px">⏰ Horario de ingreso</div>
+      <label style="${lbl};font-weight:600"><input type="radio" name="pcHT" value="gen" ${h?'':'checked'} style="width:auto" onchange="$('pcHBox').style.opacity=.45"> Horario general (L-V ${g.lv.ini}–${g.lv.fin} · Sáb ${g.sab.ini}–${g.sab.fin})</label>
+      <label style="${lbl};font-weight:600;margin-top:6px"><input type="radio" name="pcHT" value="per" ${h?'checked':''} style="width:auto" onchange="$('pcHBox').style.opacity=1"> Horario personalizado</label>
+      <div id="pcHBox" style="opacity:${h?1:.45};margin-top:8px">
+        <table class="tbl">
+          <tr><td><label style="${lbl}"><input type="checkbox" id="pcLv" ${!h||h.lv?'checked':''} style="width:auto"> Lun–Vie</label></td><td><div class="flex">${t('pcLvI',(h&&h.lv||g.lv).ini)} – ${t('pcLvF',(h&&h.lv||g.lv).fin)}</div></td></tr>
+          <tr><td><label style="${lbl}"><input type="checkbox" id="pcSab" ${!h||h.sab?'checked':''} style="width:auto"> Sábado</label></td><td><div class="flex">${t('pcSabI',(h&&h.sab||g.sab).ini)} – ${t('pcSabF',(h&&h.sab||g.sab).fin)}</div></td></tr>
+          <tr><td><label style="${lbl}"><input type="checkbox" id="pcDom" ${h&&h.dom?'checked':''} style="width:auto"> Domingo</label></td><td><div class="flex">${t('pcDomI',(h&&h.dom||g.sab).ini)} – ${t('pcDomF',(h&&h.dom||g.sab).fin)}</div></td></tr>
+        </table>
+        <div class="small muted mt8">Los feriados siguen bloqueados. Para un día puntual use «Permisos temporales» en Control de Acceso.</div>
+      </div>
+      <div class="small muted mt16">Si su horario termina mientras está conectado, el sistema cierra su sesión (le deja terminar la encuesta que esté aplicando).</div>
+    </div>
+  </div>
+  <div class="flex mt16" style="justify-content:flex-end">
+    <button class="btn btn-o" onclick="closeModal()">Cancelar</button>
+    <button class="btn btn-p" onclick="pcGuardar('${pcEsc(u.user)}')">💾 Guardar cambios</button></div>`);
+}
+function pcGuardar(user){
+  const u = USUARIOS.find(x=>x.user===user); if(!u) return;
+  const hhmm = v => /^\d{2}:\d{2}$/.test(v||'');
+  let horario = null;
+  if((document.querySelector('input[name="pcHT"]:checked')||{}).value==='per'){
+    const tramo = (chk, i, f) => $(chk).checked ? {ini:$(i).value, fin:$(f).value} : null;
+    horario = {lv: tramo('pcLv','pcLvI','pcLvF'), sab: tramo('pcSab','pcSabI','pcSabF'), dom: tramo('pcDom','pcDomI','pcDomF')};
+    for(const k of ['lv','sab','dom']){
+      const x = horario[k]; if(!x) continue;
+      if(!hhmm(x.ini) || !hhmm(x.fin) || x.ini >= x.fin) return toast('⚠️ Revise el horario: la hora de inicio debe ser menor que la de fin.','warn');
+    }
+    if(!horario.lv && !horario.sab && !horario.dom) return toast('⚠️ Marque al menos un día con horario, o elija «Horario general».','warn');
+  }
+  CONFIG_ACCESO.modulos = (CONFIG_ACCESO.modulos||[]).filter(m=>m.user!==user);
+  CONFIG_ACCESO.denegados = (CONFIG_ACCESO.denegados||[]).filter(m=>m.user!==user);
+  const cambios = [];
+  document.querySelectorAll('.pcMod').forEach(function(c){
+    const m = c.dataset.m, porRol = c.dataset.rol==='1', marcado = c.checked;
+    if(marcado && !porRol){ CONFIG_ACCESO.modulos.push({user, modulo:m, otorgadoPor: SESSION.user}); cambios.push('+'+m); }
+    if(!marcado && porRol){ CONFIG_ACCESO.denegados.push({user, modulo:m, quitadoPor: SESSION.user}); cambios.push('−'+m); }
+  });
+  CONFIG_ACCESO.horariosUsuario = CONFIG_ACCESO.horariosUsuario || {};
+  if(horario) CONFIG_ACCESO.horariosUsuario[user] = horario; else delete CONFIG_ACCESO.horariosUsuario[user];
+  guardarAcceso();
+  const det = user+' · módulos '+(cambios.join(' ')||'según rol')+' · horario '+(horario? 'personalizado':'general');
+  auditar('Configuró permisos y horario','Panel de Control', det);
+  fbActividad('Actualizó permisos', det);
+  closeModal(); render();
+  toast('✅ Permisos y horario de '+u.nombre+' guardados. Se aplican en su equipo en segundos.','ok');
+}
+
+</script>
+
 <script>
 /* =====================================================================
    PWA — instalar el SIGCL como aplicación en PC o celular
