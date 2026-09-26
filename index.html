@@ -713,6 +713,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
       </div>
       <div class="flex">
         <span class="chip chip-info no-print" id="liveChip">● EN VIVO</span>
+        <button class="icon-btn no-print" onclick="abrirInforme()" title="Informe rápido: WhatsApp · PDF · Excel">📤</button>
         <button class="icon-btn no-print" onclick="actualizarDatos(true)" title="Actualizar indicadores (releer la base de datos)">🔄</button>
         <button class="icon-btn" onclick="toggleTheme()" title="Modo claro / oscuro">🌓</button>
         <button class="icon-btn" onclick="nav('alertas')" title="Centro de Alertas">🔔<span class="ndot" id="alertDot"></span></button>
@@ -1307,6 +1308,7 @@ const NAV = [
   {id:'documentos',ico:'🗂️', txt:'Centro de Documentos', roles:['Super Administrador']},
   {sec:'Administración'},
   {id:'panel',     ico:'🎛️', txt:'Panel de Control', roles:['Super Administrador']},
+  {id:'consultas', ico:'💬', txt:'Consultas y Soporte', roles:['Super Administrador']},
   {id:'usuarios',  ico:'👤', txt:'Usuarios', roles:['Super Administrador']},
   {id:'preguntas', ico:'🧩', txt:'Preguntas y Encuestas', roles:['Super Administrador']},
   {id:'accesos',   ico:'⏰', txt:'Control de Acceso', roles:['Super Administrador']},
@@ -1341,6 +1343,7 @@ function buildNav(){
     if(!accesoVista(item)) return;
     let badge='';
     if(item.id==='alertas') badge=`<span class="badge" id="navAlertBadge"></span>`;
+    if(item.id==='consultas'){ const nC = (window.CONSULTAS||[]).filter(c=>c.estado==='Pendiente').length; if(nC) badge=`<span class="badge">${nC}</span>`; }
     if(item.id==='accesos'){
       const nP = (CONFIG_ACCESO.solicitudes||[]).filter(s=>s.estado==='Pendiente').length;
       if(nP) badge=`<span class="badge">${nP}</span>`;
@@ -1471,6 +1474,7 @@ const TITULOS = {
   reportes:['Reportes Ejecutivos','Documentos con nivel de consultoría'],
   documentos:['Centro de Documentos','Biblioteca documental con versionado'],
   panel:['Panel de Control','Permisos por módulo, horarios y actividad en tiempo real'],
+  consultas:['Consultas y Soporte','Dudas de los usuarios enviadas desde el asistente virtual'],
   usuarios:['Usuarios','Gestión de cuentas, roles y permisos'],
   preguntas:['Preguntas y Encuestas','Editor de dimensiones, preguntas y escalas · sin programar'],
   accesos:['Control de Acceso','Horarios de ingreso, feriados, solicitudes y permisos'],
@@ -1490,7 +1494,7 @@ function render(){
   const R = {dashboard:vDashboard, gerencia:vGerencia, supervisor:vSupervisor, encuesta:vEncuestaApp,
     campanias:vCampanias, qr:vQR, planes:vPlanes, seguimiento:vSeguimiento, calendario:vCalendario,
     ia:vIA, alertas:vAlertas, reportes:vReportes, documentos:vDocumentos, usuarios:vUsuarios,
-    preguntas:vPreguntas, accesos:vAccesos, panel:(typeof vPanel==='function'? vPanel : vAccesos), auditoria:vAuditoria, config:vConfig, sysadmin:vSysadmin};
+    preguntas:vPreguntas, accesos:vAccesos, panel:(typeof vPanel==='function'? vPanel : vAccesos), consultas:(typeof vConsultas==='function'? vConsultas : vAccesos), auditoria:vAuditoria, config:vConfig, sysadmin:vSysadmin};
   $('viewRoot').innerHTML='';
   (R[VIEW]||vDashboard)();
   try{ animarKPIs(); }catch(e){}
@@ -1747,7 +1751,7 @@ function vGerencia(){
 function vSupervisor(){
   const mis = SESSION.sectores || (SESSION.user==='jtimoteo'? SECTORES.map(s=>s.n) : []);
   const camp = CAMPANIAS.find(c=>c.estado==='Activa') || CAMPANIAS[CAMPANIAS.length-1];
-  const hoy = new Date().toISOString().slice(0,10);
+  const hoy = fechaHoy(); // v3.5 — fecha local de Perú
   const rows = mis.map(n=>{
     const encs = DB.encuestas.filter(e=>e.campania===camp.id && e.sector===n);
     const meta = Math.round((SECTORES.find(x=>x.n===n)||{}).trabajadores * .9);
@@ -2614,7 +2618,9 @@ function vPreguntas(){
 
   <div class="card mb16" style="border-left:4px solid var(--brand-400)">
     <div class="flex between wrap">
-      <div><div class="card-h">⚖️ Escala de respuestas</div>
+      <div><div class="card-h">⚖️ Escala de respuestas
+        <select class="no-print" style="width:auto;display:inline-block;margin-left:8px;padding:4px 8px" onchange="cambiarEscala(this.value)" title="Texto que aparece debajo de cada emoji">
+          ${Object.keys(ESCALAS).map(k=>`<option value="${k}" ${((instrumentoActivo()||{}).escala||'acuerdo')===k?'selected':''}>${ESCALAS[k].nombre}</option>`).join('')}</select></div>
       <div class="flex wrap mt8">${LIKERT.map(l=>`<span class="chip chip-neutral" style="padding:7px 12px">${l.ico} ${l.v} · ${l.txt}</span>`).join('')}</div></div>
       <div class="small muted" style="max-width:260px;align-self:center">Debajo de cada emoji, el encuestado ve el significado completo de la opción (PC y celular).</div>
     </div>
@@ -3365,6 +3371,7 @@ const CONFIG_ACCESO = {
   solicitudes: [],  // [{id, fecha, hora, user, nombre, motivo, tipo, estado}]
   usuarios: [],     // usuarios creados/modificados por el Super Admin — ingresan directo en cualquier dispositivo
   denegados: [],    // v3.3 [{user, modulo}] — módulos del rol que el Super Admin le quitó a un usuario
+  soporte: {whatsapp:'', correo:''}, // v3.5 — canales de consulta mostrados en la bienvenida
   horariosUsuario: {}, // v3.3 {user:{lv:{ini,fin}, sab:{ini,fin}|null, dom:{ini,fin}|null}} — horario personalizado
 };
 /* aplica los usuarios persistidos sobre el catálogo base (crea nuevos o actualiza clave/rol/estado) */
@@ -3397,7 +3404,7 @@ function upsertUsuarioPersistente(user, cambios){
   try{
     const s = JSON.parse(localStorage.getItem('sigcl_acceso')||'null');
     if(s){
-      ['horario','feriados','permisos','solicitudes','modulos','usuarios','campanias','instrumentos','denegados','horariosUsuario'].forEach(k=>{ if(s[k]) CONFIG_ACCESO[k]=s[k]; });
+      ['horario','feriados','permisos','solicitudes','modulos','usuarios','campanias','instrumentos','denegados','horariosUsuario','soporte'].forEach(k=>{ if(s[k]) CONFIG_ACCESO[k]=s[k]; });
       sincronizarUsuarios();
       if(typeof aplicarCampaniasCfg==='function') aplicarCampaniasCfg(s.campanias);
       if(typeof aplicarInstrumentosCfg==='function') aplicarInstrumentosCfg(s.instrumentos);
@@ -3413,7 +3420,7 @@ function aplicarConfigRemota(str){
   try{
     const c = (typeof str==='string')? JSON.parse(str) : str;
     if(!c) return;
-    ['horario','feriados','permisos','solicitudes','modulos','usuarios','campanias','instrumentos','denegados','horariosUsuario'].forEach(k=>{ if(c[k]) CONFIG_ACCESO[k]=c[k]; });
+    ['horario','feriados','permisos','solicitudes','modulos','usuarios','campanias','instrumentos','denegados','horariosUsuario','soporte'].forEach(k=>{ if(c[k]) CONFIG_ACCESO[k]=c[k]; });
     sincronizarUsuarios();
     aplicarCampaniasCfg(c.campanias);
     aplicarInstrumentosCfg(c.instrumentos);
@@ -3952,6 +3959,8 @@ function nuevaEncuestaPeriodo(){
     <option value="base">Modelo base del sistema (${nBase} preguntas en 5 dimensiones)</option>
     <option value="cero">Empezar en blanco (una dimensión y su primera pregunta)</option>
   </select>
+  <label style="margin-top:12px">Escala de respuestas (texto debajo de cada emoji)</label>
+  <select id="neEsc">${Object.keys(ESCALAS).map(k=>`<option value="${k}">${ESCALAS[k].nombre}: ${ESCALAS[k].txt[0]} … ${ESCALAS[k].txt[4]}</option>`).join('')}</select>
   <div id="neCeroBox" style="display:none">
     <div style="display:grid;grid-template-columns:1fr 2fr;gap:12px;margin-top:10px">
       <div><label>Primera dimensión</label><input id="neDim" placeholder="Ej.: Bienestar"></div>
@@ -3992,7 +4001,7 @@ function crearEncuestaPeriodo(){
     dims = [{k:'d'+Date.now().toString(36), nombre:dn, ico:ICONO_TIPO[tipo]||'⭐', color:'var(--s6)', preguntas:[q1]}];
   }
   const iid = 'I' + (Math.max(0, ...INSTRUMENTOS.map(i=> +String(i.id).replace(/\D/g,'')||0)) + 1);
-  INSTRUMENTOS.push({id:iid, nombre:nom, tipo:tipo, activo:false, dims:dims, periodo:periodo});
+  INSTRUMENTOS.push({id:iid, nombre:nom, tipo:tipo, activo:false, dims:dims, periodo:periodo, escala: ($('neEsc') && $('neEsc').value) || 'acuerdo'});
   const cid = 'C' + (Math.max(0, ...CAMPANIAS.map(c=> +String(c.id).replace(/\D/g,'')||0)) + 1);
   const activar = $('neAct') && $('neAct').checked;
   if(activar) CAMPANIAS.forEach(c=>{ if(c.estado==='Activa') c.estado='Cerrada'; });
@@ -4342,6 +4351,13 @@ function vPanel(){
       <button class="btn btn-p btn-sm mt16" onclick="guardarHorario()">💾 Guardar horario general</button>
       <div class="small muted mt8">Feriados, canjes y solicitudes de acceso: módulo <a href="#" onclick="nav('accesos');return false">⏰ Control de Acceso</a>.</div>
     </div>
+    <div class="card span6"><div class="card-h">📞 Canales de soporte</div>
+      <div class="card-sub">Se muestran en el mensaje de bienvenida y en el asistente virtual</div>
+      <label>WhatsApp de consultas (con código de país)</label><input id="spWa" placeholder="51987654321" value="${pcEsc(soporte().whatsapp)}">
+      <label style="margin-top:8px">Correo de soporte (opcional)</label><input id="spMail" placeholder="joel.timoteo@unifrutti.com" value="${pcEsc(soporte().correo)}">
+      <button class="btn btn-p btn-sm mt16" onclick="guardarSoporte()">💾 Guardar canales</button>
+      <div class="small muted mt8">Consultas recibidas: módulo <a href="#" onclick="nav('consultas');return false">💬 Consultas y Soporte</a>.</div>
+    </div>
     <div class="card span6"><div class="card-h">🔥 Conexión en tiempo real</div>
       ${fbConfigurado()
         ? `<p class="small" style="line-height:1.9">Proyecto Firebase: <b>${pcEsc(window.SIGCL_FIREBASE.projectId)}</b><br>Estado: <span id="pcFbEstado">⏳ conectando…</span><br>
@@ -4560,6 +4576,620 @@ function pcGuardar(user){
   fbActividad('Actualizó permisos', det);
   closeModal(); render();
   toast('✅ Permisos y horario de '+u.nombre+' guardados. Se aplican en su equipo en segundos.','ok');
+}
+
+</script>
+
+<script>
+/* =====================================================================
+   v3.5 — BIENVENIDA · ASISTENTE VIRTUAL · CONSULTAS · INFORME RÁPIDO
+          (WhatsApp / PDF / Excel con gráficos) · ESCALAS CON TEXTO
+   ===================================================================== */
+document.head.insertAdjacentHTML('beforeend', `<style>
+/* escala: el significado siempre visible y resaltado debajo del emoji */
+.likert button .lk-txt{font-size:12.5px;font-weight:700;color:var(--ink);letter-spacing:.1px}
+.likert button.sel .lk-txt{color:var(--brand-500)}
+.likert button[data-v="1"]{border-bottom:3px solid #dc2626}.likert button[data-v="2"]{border-bottom:3px solid #ea580c}
+.likert button[data-v="3"]{border-bottom:3px solid #d97706}.likert button[data-v="4"]{border-bottom:3px solid #65a30d}
+.likert button[data-v="5"]{border-bottom:3px solid #16a34a}
+/* asistente */
+#cbFab{position:fixed;right:18px;bottom:18px;z-index:390;width:58px;height:58px;border-radius:50%;border:none;cursor:pointer;
+  background:linear-gradient(135deg,#e11d2e,#123a6e);color:#fff;font-size:26px;box-shadow:0 10px 28px -8px rgba(0,0,0,.55);display:none;align-items:center;justify-content:center}
+#cbFab .cb-dot{position:absolute;top:4px;right:4px;min-width:18px;height:18px;border-radius:9px;background:#16a34a;font-size:11px;font-weight:800;display:none;align-items:center;justify-content:center;padding:0 4px}
+body.cb-on .toast-wrap{bottom:88px}
+body.cb-open .toast-wrap{right:calc(min(380px,100vw - 24px) + 30px)}
+@media(max-width:720px){body.cb-open .toast-wrap{right:12px;left:12px;bottom:auto;top:12px}}
+#cbPanel{position:fixed;right:18px;bottom:86px;z-index:391;width:min(380px,calc(100vw - 24px));height:min(560px,calc(100vh - 120px));display:none;flex-direction:column;
+  background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:0 24px 60px -18px rgba(0,0,0,.6);overflow:hidden}
+#cbPanel.open{display:flex}
+#cbPanel .cb-h{background:linear-gradient(135deg,#123a6e,#0b2447);color:#fff;padding:12px 14px;display:flex;align-items:center;gap:10px}
+#cbPanel .cb-tabs{display:flex;border-bottom:1px solid var(--line)}
+#cbPanel .cb-tabs button{flex:1;padding:9px;border:none;background:none;color:var(--ink-2);font-weight:700;font-size:12.5px;cursor:pointer;border-bottom:2px solid transparent}
+#cbPanel .cb-tabs button.on{color:var(--brand-500);border-bottom-color:var(--brand-500)}
+#cbMsgs{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
+.cb-m{max-width:88%;padding:9px 12px;border-radius:14px;font-size:13px;line-height:1.5;white-space:pre-line}
+.cb-bot{background:var(--surface-2);border:1px solid var(--line);align-self:flex-start;border-bottom-left-radius:4px}
+.cb-yo{background:var(--brand-500,#2a78d6);color:#fff;align-self:flex-end;border-bottom-right-radius:4px}
+.cb-acc{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.cb-acc button,.cb-chips button{border:1px solid var(--line-2);background:var(--surface);color:var(--ink);border-radius:999px;padding:5px 10px;font-size:12px;cursor:pointer}
+.cb-chips{display:flex;gap:6px;overflow:auto;padding:6px 10px;border-top:1px solid var(--line)}
+.cb-chips button{white-space:nowrap}
+.cb-in{display:flex;gap:6px;padding:10px;border-top:1px solid var(--line)}
+.cb-in input{flex:1}
+.bv-canal{display:flex;gap:12px;align-items:center;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2);cursor:pointer;text-align:left;width:100%;color:var(--ink)}
+.bv-canal:hover{border-color:var(--brand-400);transform:translateY(-1px)}
+.bv-canal .ico{font-size:26px}
+</style>`);
+
+/* ---------------- A. ESCALAS (acuerdo / satisfacción / frecuencia) ---------------- */
+const ESCALAS = {
+  acuerdo:     {nombre:'Acuerdo',      txt:['Totalmente en desacuerdo','En desacuerdo','Ni de acuerdo ni en desacuerdo','De acuerdo','Totalmente de acuerdo']},
+  satisfaccion:{nombre:'Satisfacción', txt:['Muy insatisfecho','Insatisfecho','Ni satisfecho ni insatisfecho','Satisfecho','Muy satisfecho']},
+  frecuencia:  {nombre:'Frecuencia',   txt:['Nunca','Casi nunca','A veces','Casi siempre','Siempre']},
+};
+function aplicarEscalaActiva(){
+  try{ const i = instrumentoActivo(); const e = ESCALAS[(i && i.escala) || 'acuerdo'] || ESCALAS.acuerdo; LIKERT.forEach((l,ix)=> l.txt = e.txt[ix]); }catch(e){}
+}
+function cambiarEscala(k){
+  if(!permiso(['Administrador'])) return;
+  if(!ESCALAS[k]) return;
+  const i = instrumentoActivo(); i.escala = k; aplicarEscalaActiva(); guardarInstrumentos();
+  auditar('Cambió escala de respuestas','Preguntas y Encuestas', i.nombre+' → '+ESCALAS[k].nombre);
+  render(); toast('✅ Escala «'+ESCALAS[k].nombre+'» aplicada: el QR y la encuesta asistida muestran este texto debajo de cada emoji.','ok');
+}
+(function(){
+  const _rs = window.renderSurvey;
+  window.renderSurvey = function(){
+    aplicarEscalaActiva();
+    const r = _rs.apply(this, arguments);
+    try{ document.querySelectorAll('.likert').forEach(g=> g.querySelectorAll('button').forEach((b,ix)=> b.setAttribute('data-v', ix+1))); }catch(e){}
+    return r;
+  };
+  const _vp = window.vPreguntas;
+  window.vPreguntas = function(){ aplicarEscalaActiva(); return _vp.apply(this, arguments); };
+})();
+aplicarEscalaActiva();
+
+/* ---------------- utilidades ---------------- */
+const soporte = () => Object.assign({whatsapp:'', correo:''}, CONFIG_ACCESO.soporte || {});
+const waNum = n => String(n||'').replace(/\D/g,'');
+function abrirWhatsApp(numero, texto){
+  const url = 'https://wa.me/' + waNum(numero) + '?text=' + encodeURIComponent(texto||'');
+  window.open(url, '_blank', 'noopener');
+}
+const semEmoji = v => v>=80 ? '🟢' : v>=70 ? '🟡' : v>=60 ? '🟠' : '🔴';
+const semHex = v => v>=90 ? '#16a34a' : v>=80 ? '#65a30d' : v>=70 ? '#d97706' : v>=60 ? '#ea580c' : '#dc2626';
+const primerNombre = n => String(n||'').split(' ')[0];
+function puedeVerResultados(){ return !!SESSION && ['dashboard','reportes','gerencia'].some(id=> accesoVista(NAV.find(x=>x.id===id))); }
+
+/* ---------------- B. BIENVENIDA AL INGRESAR ---------------- */
+function mostrarBienvenida(usr){
+  if(!usr || usr.user==='jtimoteo') return;
+  const k = 'sigcl_bienv_'+usr.user;
+  try{ if(localStorage.getItem(k)===fechaHoy()) return; }catch(e){}
+  const sop = soporte();
+  modal(`<div style="text-align:center">
+    <div style="font-size:48px;margin-bottom:4px">👋</div>
+    <h3 style="font-size:21px;margin-bottom:6px">¡Hola, ${pcEsc(primerNombre(usr.nombre))}!</h3>
+    <p style="color:var(--ink-2);max-width:470px;margin:0 auto 6px;line-height:1.7">Te saluda <b>Joel Timoteo</b>, creador del <b>Sistema Inteligente de Clima Laboral</b> de Unifrutti Perú. Bienvenido(a) al SIGCL.</p>
+    <p style="color:var(--ink-2);max-width:470px;margin:0 auto 14px">Cualquier duda o consulta puedes hacerla a través de los siguientes canales:</p>
+  </div>
+  <div style="display:grid;gap:10px">
+    <button class="bv-canal" onclick="closeModal();cbAbrir('chat')"><span class="ico">🤖</span><span><b>Asistente virtual</b><div class="small muted">Respuestas al instante sobre el uso del sistema</div></span></button>
+    <button class="bv-canal" onclick="closeModal();cbAbrir('consulta')"><span class="ico">📩</span><span><b>Enviar una consulta</b><div class="small muted">Te respondo desde el sistema; verás la respuesta en «Mis consultas»</div></span></button>
+    ${sop.whatsapp ? `<button class="bv-canal" onclick="abrirWhatsApp('${waNum(sop.whatsapp)}','Hola Joel, soy ${pcEsc(usr.nombre)} (${pcEsc(usr.user)}). Tengo una consulta sobre el SIGCL: ')"><span class="ico">🟢</span><span><b>WhatsApp</b><div class="small muted">Escríbeme directamente</div></span></button>` : ''}
+  </div>
+  <label style="display:flex;align-items:center;gap:8px;margin-top:14px;text-transform:none;letter-spacing:0;font-weight:500">
+    <input type="checkbox" id="bvHoy" style="width:auto"> No volver a mostrar hoy</label>
+  <div class="flex mt16" style="justify-content:flex-end"><button class="btn btn-p" onclick="bvCerrar('${pcEsc(usr.user)}')">¡Empecemos! 🚀</button></div>`);
+}
+function bvCerrar(user){
+  try{ if($('bvHoy') && $('bvHoy').checked) localStorage.setItem('sigcl_bienv_'+user, fechaHoy()); }catch(e){}
+  closeModal();
+}
+
+/* ---------------- C. ASISTENTE VIRTUAL (gratuito, sin API externa) ---------------- */
+let CB_TAB = 'chat', CB_HIST = [], CB_INI = false;
+document.addEventListener('DOMContentLoaded', function(){
+  document.body.insertAdjacentHTML('beforeend', `
+  <button id="cbFab" class="no-print" title="Asistente virtual y consultas" onclick="cbToggle()">🤖<span class="cb-dot" id="cbDot"></span></button>
+  <div id="cbPanel" class="no-print" role="dialog" aria-label="Asistente virtual">
+    <div class="cb-h"><div style="font-size:24px">🤖</div><div style="flex:1"><b>Asistente SIGCL</b><div style="font-size:11px;opacity:.8">Ayuda al instante · consultas a Joel</div></div>
+      <button class="icon-btn" style="background:rgba(255,255,255,.12);color:#fff" onclick="cbToggle(false)" title="Cerrar">✕</button></div>
+    <div class="cb-tabs"><button id="cbTChat" onclick="cbTab('chat')">💬 Asistente</button><button id="cbTCons" onclick="cbTab('mis')">📩 Mis consultas <span id="cbNMis"></span></button></div>
+    <div id="cbMsgs"></div>
+    <div class="cb-chips" id="cbChips"></div>
+    <div class="cb-in" id="cbIn"><input id="cbTxt" placeholder="Escribe tu pregunta…" onkeydown="if(event.key==='Enter')cbEnviar()"><button class="btn btn-p btn-sm" onclick="cbEnviar()">Enviar</button></div>
+  </div>`);
+});
+function cbVisible(on){
+  const f = $('cbFab'); if(!f) return;
+  f.style.display = on ? 'flex' : 'none';
+  document.body.classList.toggle('cb-on', !!on);
+  if(!on){ const p = $('cbPanel'); if(p) p.classList.remove('open'); document.body.classList.remove('cb-open'); }
+}
+function cbToggle(forzar){
+  const p = $('cbPanel'); if(!p) return;
+  const abrir = (forzar===undefined) ? !p.classList.contains('open') : !!forzar;
+  p.classList.toggle('open', abrir); document.body.classList.toggle('cb-open', abrir);
+  if(abrir){ cbIniciar(); cbPintar(); setTimeout(()=>{ const t=$('cbTxt'); if(t && CB_TAB==='chat') t.focus(); }, 60); }
+}
+function cbAbrir(modo){
+  cbToggle(true);
+  if(modo==='consulta'){ cbTab('chat'); cbBot('📩 Escribe tu consulta abajo y presiona «Enviar». Luego toca «Enviar a Joel» para que llegue a su bandeja.', []); window.__cbModoConsulta = true; }
+  else cbTab('chat');
+}
+function cbTab(t){ CB_TAB = t; cbPintar(); }
+function cbIniciar(){
+  if(CB_INI) return; CB_INI = true;
+  cbBot('¡Hola, '+primerNombre(SESSION && SESSION.nombre)+'! 👋 Soy el asistente del SIGCL. Pregúntame cómo aplicar una encuesta, usar el QR, tu horario, cómo enviar un informe por WhatsApp o exportar a PDF/Excel. Si no sé la respuesta, te ayudo a enviarle la consulta a Joel.', []);
+}
+function cbBot(txt, acc){ CB_HIST.push({de:'bot', txt, acc: acc||[]}); cbPintar(); }
+function cbYo(txt){ CB_HIST.push({de:'yo', txt}); }
+function cbPintar(){
+  const box = $('cbMsgs'); if(!box) return;
+  const tC = $('cbTChat'), tM = $('cbTCons');
+  if(tC) tC.classList.toggle('on', CB_TAB==='chat'); if(tM) tM.classList.toggle('on', CB_TAB==='mis');
+  const mis = window.MIS_CONSULTAS || [];
+  const nResp = mis.filter(c=>c.estado==='Respondida' && !c.leida).length;
+  const nm = $('cbNMis'); if(nm) nm.textContent = nResp ? '('+nResp+')' : '';
+  $('cbIn').style.display = CB_TAB==='chat' ? 'flex' : 'none';
+  $('cbChips').style.display = CB_TAB==='chat' ? 'flex' : 'none';
+  if(CB_TAB==='chat'){
+    box.innerHTML = CB_HIST.map((m,i)=>`<div class="cb-m ${m.de==='yo'?'cb-yo':'cb-bot'}">${pcEsc(m.txt)}${m.acc && m.acc.length ? `<div class="cb-acc">${m.acc.map((a,j)=>`<button onclick="cbAccion(${i},${j})">${pcEsc(a.t)}</button>`).join('')}</div>`:''}</div>`).join('');
+    const chips = ['¿Cómo aplico una encuesta?','¿Cómo uso el QR?','¿Cuántas encuestas llevo hoy?','Enviar informe por WhatsApp','Mi horario de ingreso','Sin señal / internet'];
+    if(puedeVerResultados()) chips.splice(3,0,'¿Qué sector tiene mejor clima?');
+    $('cbChips').innerHTML = chips.map(c=>`<button onclick="cbPreguntar(this.textContent)">${pcEsc(c)}</button>`).join('');
+  } else {
+    box.innerHTML = !window.FB_OK && !mis.length
+      ? `<div class="cb-m cb-bot">Las consultas se envían y responden en tiempo real cuando la conexión (Firebase) está activa.${soporte().whatsapp? ' Mientras tanto puedes escribir por WhatsApp.':''}</div>`
+      : mis.length ? mis.map(c=>`<div class="cb-m cb-bot" style="max-width:100%">
+          <div class="small muted">${pcEsc(new Date(tsMs(c)).toLocaleString('es-PE'))} · ${c.estado==='Pendiente'?'⏳ Pendiente':c.estado==='Respondida'?'✅ Respondida':'✔ Cerrada'}</div>
+          <b>${pcEsc(c.texto)}</b>${c.respuesta? `<div style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--line)">💬 <b>Joel:</b> ${pcEsc(c.respuesta)}</div>`:''}</div>`).join('')
+      : '<div class="cb-m cb-bot">Aún no has enviado consultas. Escríbela en la pestaña «Asistente».</div>';
+    mis.filter(c=>c.estado==='Respondida' && !c.leida).forEach(c=> c.leida = true);
+    cbBadge();
+  }
+  box.scrollTop = box.scrollHeight;
+}
+function cbAccion(i, j){ const a = (CB_HIST[i]||{}).acc && CB_HIST[i].acc[j]; if(a && typeof a.fn==='function') a.fn(); }
+function cbPreguntar(t){ const i = $('cbTxt'); if(i){ i.value = t; cbEnviar(); } }
+function cbEnviar(){
+  const i = $('cbTxt'); if(!i) return;
+  const q = i.value.trim(); if(!q) return;
+  i.value = ''; cbYo(q);
+  if(window.__cbModoConsulta){ window.__cbModoConsulta = false; cbBot('¿Envío esta consulta a Joel?', [{t:'📩 Sí, enviar a Joel', fn:()=>cbEnviarConsulta(q)}, {t:'🤖 No, respóndeme tú', fn:()=>cbResponder(q)}]); return; }
+  cbResponder(q);
+}
+const cbNorm = t => String(t||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+function cbIr(id, txt){ const it = NAV.find(x=>x.id===id); return (it && accesoVista(it)) ? [{t:txt||('Abrir '+it.txt), fn:()=>{ cbToggle(false); nav(id); }}] : []; }
+function cbHorarioTxt(){
+  const u = SESSION; if(!u) return '';
+  if(u.user==='jtimoteo') return 'Como propietario del sistema no tienes restricción de horario.';
+  const h = (CONFIG_ACCESO.horariosUsuario||{})[u.user], g = CONFIG_ACCESO.horario;
+  if(!h) return `Tu horario es el general: lunes a viernes ${g.lv.ini}–${g.lv.fin} y sábados ${g.sab.ini}–${g.sab.fin}. Domingos y feriados sin acceso.`;
+  return `Tu horario personalizado: L-V ${h.lv? h.lv.ini+'–'+h.lv.fin:'sin acceso'} · Sáb ${h.sab? h.sab.ini+'–'+h.sab.fin:'sin acceso'} · Dom ${h.dom? h.dom.ini+'–'+h.dom.fin:'sin acceso'}.`;
+}
+function cbMisNumeros(){
+  const u = SESSION, hoy = fechaHoy(), lunes = pcLunes();
+  const secs = (u.sectores||[]);
+  const encs = DB.encuestas.filter(e=> e.usuario===u.user || (!e.usuario && secs.includes(e.sector)));
+  return {hoy: encs.filter(e=>e.fecha===hoy).length, semana: encs.filter(e=>e.fecha>=lunes).length, total: encs.length,
+    asis: encs.filter(e=>e.fecha===hoy && e.usuario===u.user).length, qr: encs.filter(e=>e.fecha===hoy && !e.usuario).length};
+}
+const CB_INTENTS = [
+  {k:['hola','buenos','buenas','saludos'], r:()=>['¡Hola! 😊 ¿En qué te ayudo? Puedes usar los botones de abajo o escribir tu pregunta.', []]},
+  {k:['gracias','genial','excelente','ok gracias'], r:()=>['¡Con gusto! 🙌 Aquí estoy si necesitas algo más.', []]},
+  {k:['aplicar','asistida','encuestar','hacer encuesta','aplico','iletrado'], r:()=>[
+    'Para aplicar una encuesta:\n1️⃣ Entra a «Aplicar Encuesta».\n2️⃣ Elige la modalidad: 🧑‍💼 Asistida (tú lees y marcas por el trabajador) o 📱 QR (el trabajador responde en su celular).\n3️⃣ Completa sector, jefe evaluado, tiempo en la empresa y tipo de trabajador.\n4️⃣ Marca una opción por pregunta y envía. Al terminar puedes encuestar a otra persona.\nLa encuesta es anónima: no se pide nombre ni DNI.', cbIr('encuesta','📝 Ir a Aplicar Encuesta')]},
+  {k:['qr','codigo','escanear','celular del trabajador'], r:()=>[
+    'El QR abre directo la encuesta activa en el celular del trabajador:\n• Muéstrale el código del módulo «Código QR» (o de «Aplicar Encuesta → QR»).\n• Él lo escanea con la cámara, responde y al final ve un agradecimiento.\n• Llega a los indicadores en segundos. Si no tiene señal, su celular la guarda y la envía al volver la conexión.', cbIr('qr','🔳 Ver el QR')]},
+  {k:['senal','internet','offline','sin conexion','no carga','datos moviles'], r:()=>[
+    'Sin señal no se pierde nada 📴: la encuesta queda guardada en el equipo y se envía sola cuando vuelve la conexión. No cierres ni borres los datos del navegador hasta ver el mensaje «Encuesta pendiente sincronizada».', []]},
+  {k:['horario','hora de ingreso','no puedo ingresar','fuera de horario','bloqueado','domingo','feriado'], r:()=>[
+    cbHorarioTxt()+'\nSi necesitas ingresar fuera de tu horario, en la pantalla de acceso usa «Enviar solicitud»: Joel puede darte permiso por el día.', []]},
+  {k:['contrasena','clave','password','olvide'], r:()=>[
+    'Tu contraseña debe tener mínimo 8 caracteres con mayúscula, minúscula y número. Si la olvidaste, usa «¿Olvidó su contraseña?» en el login o envía una consulta a Joel para que la restablezca.', [{t:'📩 Pedir restablecer', fn:()=>cbEnviarConsulta('Solicito restablecer mi contraseña del SIGCL.')}]]},
+  {k:['modulo','permiso','no veo','acceso a','habilitar'], r:()=>[
+    'Los módulos que ves los asigna Joel desde el Panel de Control. Si necesitas otro, intenta abrirlo: el sistema te ofrecerá solicitarlo, o envía una consulta.', [{t:'📩 Solicitar un módulo', fn:()=>{ window.__cbModoConsulta = true; cbBot('Escribe qué módulo necesitas y para qué 👇', []); }}]]},
+  {k:['cuantas','llevo','mis encuestas','avance','contador','meta'], r:()=>{
+    const n = cbMisNumeros();
+    return [`📊 Tu avance:\n• Hoy: ${n.hoy} encuesta(s) (${n.asis} asistidas · ${n.qr} por QR en tus sectores)\n• Esta semana: ${n.semana}\n• Total: ${n.total}`, cbIr('supervisor','🔢 Ver mi contador')]; }},
+  {k:['informe','reporte','whatsapp','pdf','excel','exportar','gerencia','jefatura','enviar estadisticas'], r:()=>[
+    'Con el botón 📤 de la barra superior generas un informe ordenado en segundos:\n🟢 WhatsApp: resumen con las cifras clave para tu jefatura.\n📄 PDF: informe con gráficos y tablas para gerencia.\n📊 Excel: hojas con gráficos, resumen y detalle.', [{t:'📤 Abrir informe rápido', fn:()=>{ cbToggle(false); abrirInforme(); }}]]},
+  {k:['escala','emoji','de acuerdo','satisfecho','opciones'], r:()=>[
+    'Cada opción muestra el emoji y debajo su significado (por ejemplo «De acuerdo» o «Satisfecho»). La escala la define Joel por encuesta: acuerdo, satisfacción o frecuencia. Siempre es de 1 a 5.', []]},
+  {k:['nueva encuesta','preguntas','agregar pregunta','mes','campana'], r:()=>[
+    'Las encuestas por mes o año y sus preguntas se crean en «Preguntas y Encuestas» → 🆕 Nueva encuesta (solo Joel o administradores autorizados).', cbIr('preguntas','🧩 Abrir Preguntas y Encuestas')]},
+  {k:['indicador','clima','sector','dimension','jefe','liderazgo','comunicacion','respeto','mejor','peor','critico','recomend','problema'], r:(q)=>{
+    if(!puedeVerResultados()) return ['Los resultados de clima los ven solo los administradores y gerencia. Tú puedes consultar tu avance de encuestas («¿Cuántas encuestas llevo hoy?»).', []];
+    try{ return [responderIA(q), cbIr('dashboard','📊 Ver indicadores')]; }catch(e){ return ['Puedes revisarlo en Indicadores.', cbIr('dashboard')]; }
+  }},
+  {k:['error','falla','no funciona','problema con','se cuelga','lento'], r:()=>[
+    'Lamento el inconveniente 🙏. Prueba: 1) presionar 🔄 en la barra superior, 2) recargar con Ctrl+F5 (en celular, cerrar y abrir). Si continúa, envíale el detalle a Joel.', [{t:'📩 Reportar a Joel', fn:()=>{ window.__cbModoConsulta = true; cbBot('Describe qué pasó (módulo, qué intentabas hacer) 👇', []); }}]]},
+];
+function cbResponder(q){
+  const t = cbNorm(q);
+  let mejor = null, pts = 0;
+  CB_INTENTS.forEach(it=>{ const p = it.k.reduce((a,k)=> a + (t.includes(cbNorm(k)) ? k.length : 0), 0); if(p > pts){ pts = p; mejor = it; } });
+  if(mejor){ const [txt, acc] = mejor.r(q); cbBot(txt, acc); return; }
+  cbBot('No tengo una respuesta exacta para eso 🤔. ¿Quieres que envíe tu consulta a Joel? Te responderá en «Mis consultas».',
+    [{t:'📩 Enviar a Joel', fn:()=>cbEnviarConsulta(q)}].concat(soporte().whatsapp ? [{t:'🟢 WhatsApp', fn:()=>abrirWhatsApp(soporte().whatsapp, 'Hola Joel, consulta sobre el SIGCL: '+q)}] : []));
+}
+
+/* ---------------- D. CONSULTAS (Firebase «consultas») ---------------- */
+window.CONSULTAS = []; window.MIS_CONSULTAS = [];
+function cbEnviarConsulta(texto, origen){
+  if(!SESSION) return;
+  fbCargar().then(function(db){
+    if(!db){
+      if(soporte().whatsapp){ abrirWhatsApp(soporte().whatsapp, 'Hola Joel, consulta sobre el SIGCL: '+texto); cbBot('Abrí WhatsApp para que envíes tu consulta a Joel. 🟢', []); }
+      else cbBot('⚠️ El servicio de consultas no está disponible ahora. Intenta en unos minutos.', []);
+      return;
+    }
+    const id = 'Q'+Date.now().toString(36).toUpperCase()+Math.random().toString(36).slice(2,5).toUpperCase();
+    db.collection('consultas').doc(id).set({id, user:SESSION.user, nombre:SESSION.nombre||'', rol:SESSION.rol||'', texto:String(texto).slice(0,1500),
+      origen: origen||'asistente', estado:'Pendiente', respuesta:'', ts: fbTs(), creado: Date.now(), disp: dispositivoTxt()})
+      .then(()=>{ cbBot('✅ Consulta enviada a Joel. Verás su respuesta en «📩 Mis consultas» y te avisaré aquí mismo.', [{t:'📩 Ver mis consultas', fn:()=>cbTab('mis')}]); fbActividad('Envió consulta', String(texto).slice(0,60)); })
+      .catch(()=> cbBot('⚠️ No se pudo enviar. Revisa tu conexión e inténtalo de nuevo.', []));
+  });
+}
+function cbBadge(){
+  const d = $('cbDot'); if(!d) return;
+  const nResp = (window.MIS_CONSULTAS||[]).filter(c=>c.estado==='Respondida' && !c.leida).length;
+  const nPend = accesoVista(NAV.find(x=>x.id==='consultas')) ? (window.CONSULTAS||[]).filter(c=>c.estado==='Pendiente').length : 0;
+  const n = nResp + nPend;
+  d.textContent = n; d.style.display = n ? 'flex' : 'none';
+  d.style.background = nPend ? '#e11d2e' : '#16a34a';
+}
+function consultasEscuchar(){
+  if(!SESSION || window.__cqUnsub) return;
+  const u = SESSION.user;
+  fbCargar().then(function(db){
+    if(!db || !SESSION || window.__cqUnsub) return;
+    window.__cqUnsub = [];
+    let iniMis = false;
+    window.__cqUnsub.push(db.collection('consultas').where('user','==',u).onSnapshot(function(snap){
+      const antes = {}; (window.MIS_CONSULTAS||[]).forEach(c=> antes[c.id] = c);
+      window.MIS_CONSULTAS = snap.docs.map(d=>{ const c = d.data(); const a = antes[c.id]; if(a && a.leida && a.respuesta===c.respuesta) c.leida = true; return c; })
+        .sort((a,b)=>tsMs(b)-tsMs(a));
+      if(iniMis) snap.docChanges().forEach(ch=>{ const c = ch.doc.data(); if(ch.type==='modified' && c.estado==='Respondida' && c.respuesta && (!antes[c.id] || antes[c.id].respuesta!==c.respuesta))
+        toast('💬 Joel respondió tu consulta. Ábrela en el asistente 🤖 → «Mis consultas».','ok'); });
+      iniMis = true; cbBadge(); if($('cbPanel') && $('cbPanel').classList.contains('open')) cbPintar();
+    }, function(){}));
+    if(accesoVista(NAV.find(x=>x.id==='consultas'))){
+      let iniAll = false;
+      window.__cqUnsub.push(db.collection('consultas').orderBy('ts','desc').limit(300).onSnapshot(function(snap){
+        window.CONSULTAS = snap.docs.map(d=>d.data());
+        if(iniAll) snap.docChanges().forEach(ch=>{ if(ch.type==='added'){ const c = ch.doc.data(); if(c.user!==u) toast('📩 Nueva consulta de '+(c.nombre||c.user)+': «'+String(c.texto).slice(0,60)+'»','warn'); } });
+        iniAll = true; cbBadge(); try{ buildNav(); }catch(e){}
+        if(VIEW==='consultas') cqPintar();
+      }, function(){}));
+    }
+  });
+}
+function consultasDejar(){ (window.__cqUnsub||[]).forEach(f=>{ try{ f(); }catch(e){} }); window.__cqUnsub = null; window.CONSULTAS = []; window.MIS_CONSULTAS = []; CB_HIST = []; CB_INI = false; }
+let CQ_FILTRO = 'Pendiente';
+function vConsultas(){
+  $('viewRoot').innerHTML = `
+  <div class="flex between wrap mb16"><div><h3 class="view-title">💬 Consultas y Soporte</h3>
+    <div class="view-sub">Dudas enviadas por los usuarios desde el asistente · respóndelas aquí y les llega al instante</div></div>
+    <div class="flex wrap no-print" id="cqFiltros"></div></div>
+  <div id="cqKpis" class="mb16" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px"></div>
+  <div id="cqLista"></div>
+  <div class="card mt16" style="max-width:820px"><div class="card-h">📞 Canales publicados en la bienvenida</div>
+    <div class="small muted">WhatsApp: <b>${pcEsc(soporte().whatsapp||'— sin configurar —')}</b> · se configura en 🎛️ Panel de Control → «Canales de soporte».</div></div>`;
+  cqPintar();
+}
+function cqPintar(){
+  const L = window.CONSULTAS || [];
+  const cnt = e => L.filter(c=>c.estado===e).length;
+  const k = $('cqKpis'); if(!k) return;
+  k.innerHTML = [['⏳ Pendientes',cnt('Pendiente')],['✅ Respondidas',cnt('Respondida')],['✔ Cerradas',cnt('Cerrada')],['📩 Total',L.length]]
+    .map(x=>`<div class="card" style="margin:0"><div class="small muted">${x[0]}</div><div style="font-size:26px;font-weight:800">${x[1]}</div></div>`).join('');
+  $('cqFiltros').innerHTML = ['Pendiente','Respondida','Cerrada','Todas'].map(f=>`<button class="btn btn-sm ${CQ_FILTRO===f?'btn-p':'btn-o'}" onclick="CQ_FILTRO='${f}';cqPintar()">${f}</button>`).join('');
+  const lista = L.filter(c=> CQ_FILTRO==='Todas' || c.estado===CQ_FILTRO);
+  $('cqLista').innerHTML = !window.FB_OK && !L.length
+    ? `<div class="card" style="text-align:center;padding:40px"><div style="font-size:40px">🔌</div><b>Las consultas requieren la conexión en tiempo real (Firebase).</b></div>`
+    : !lista.length ? `<div class="card" style="text-align:center;padding:40px"><div style="font-size:40px">🎉</div><b>No hay consultas «${CQ_FILTRO}».</b></div>`
+    : lista.map(c=>`<div class="card mb16" style="border-left:4px solid ${c.estado==='Pendiente'?'#e11d2e':c.estado==='Respondida'?'#16a34a':'var(--line)'}">
+      <div class="flex between wrap"><div><b>${pcEsc(c.nombre||c.user)}</b> <span class="small muted">(${pcEsc(c.user)} · ${pcEsc(c.rol)})</span>
+        <div class="small muted">${pcEsc(new Date(tsMs(c)).toLocaleString('es-PE'))} · ${pcEsc(c.disp||'')} · vía ${pcEsc(c.origen||'asistente')}</div></div>
+        <span class="chip ${c.estado==='Pendiente'?'chip-cri':c.estado==='Respondida'?'chip-exc':'chip-neutral'}">${pcEsc(c.estado)}</span></div>
+      <div style="margin:10px 0;font-size:14px;white-space:pre-line">${pcEsc(c.texto)}</div>
+      ${c.respuesta? `<div class="small" style="background:var(--surface-2);border-radius:10px;padding:8px 12px;margin-bottom:8px">💬 <b>Respuesta:</b> ${pcEsc(c.respuesta)}</div>`:''}
+      ${c.estado!=='Cerrada'? `<div class="no-print"><textarea id="cqR_${c.id}" rows="2" placeholder="Escribe tu respuesta…">${pcEsc(c.respuesta||'')}</textarea>
+        <div class="flex mt8 wrap" style="justify-content:flex-end">
+          <button class="btn btn-o btn-sm" onclick="cqCerrar('${c.id}')">✔ Cerrar</button>
+          <button class="btn btn-p btn-sm" onclick="cqResponder('${c.id}')">💬 Responder</button></div></div>`:''}
+    </div>`).join('');
+}
+function cqResponder(id){
+  const t = ($('cqR_'+id)||{}).value || '';
+  if(t.trim().length<3) return toast('⚠️ Escribe la respuesta.','warn');
+  fbCargar().then(db=>{ if(!db) return;
+    db.collection('consultas').doc(id).set({respuesta:t.trim(), estado:'Respondida', respondidoPor:SESSION.user, tsResp: fbTs()}, {merge:true})
+      .then(()=>{ toast('✅ Respuesta enviada: el usuario la verá al instante.','ok'); auditar('Respondió consulta','Consultas', id); fbActividad('Respondió consulta', id); });
+  });
+}
+function cqCerrar(id){
+  fbCargar().then(db=>{ if(!db) return; db.collection('consultas').doc(id).set({estado:'Cerrada', cerradoPor:SESSION.user}, {merge:true}).then(()=>toast('✔ Consulta cerrada.','ok')); });
+}
+
+/* sesión: bienvenida, asistente y escucha de consultas */
+(function(){
+  const _ini = window.iniciarSesion;
+  window.iniciarSesion = function(usr){
+    const r = _ini.apply(this, arguments);
+    try{
+      cbVisible(true); consultasEscuchar();
+      if(!usr.debeCambiar) setTimeout(()=>{ if(SESSION && SESSION.user===usr.user && !document.querySelector('#modalRoot .modal-back')) mostrarBienvenida(usr); }, 500);
+    }catch(e){}
+    return r;
+  };
+  const _out = window.logout;
+  window.logout = function(){ try{ cbVisible(false); consultasDejar(); }catch(e){} return _out.apply(this, arguments); };
+  const _go = window.go;
+  window.go = function(sec){ const r = _go.apply(this, arguments); try{ cbVisible(sec==='app' && !!SESSION); }catch(e){} return r; };
+})();
+setInterval(function(){ if(!SESSION && window.__cqUnsub){ consultasDejar(); cbVisible(false); } }, 5000);
+
+/* ---------------- E. INFORME RÁPIDO: WhatsApp · PDF · Excel ---------------- */
+window.LIBS_URL = window.LIBS_URL || {
+  exceljs:  ['https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js','https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js'],
+  jspdf:    ['https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js','https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js'],
+  autotable:['https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js','https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js'],
+};
+function cargarLib(nombre, listo){
+  if(listo()) return Promise.resolve();
+  const urls = window.LIBS_URL[nombre] || [];
+  return urls.reduce((p, url)=> p.catch(()=> new Promise((ok, err)=>{
+    const s = document.createElement('script'); s.src = url; s.onload = ()=> listo()? ok() : err(); s.onerror = err; document.head.appendChild(s);
+  })), Promise.reject()).catch(()=>{ throw new Error('No se pudo cargar la librería '+nombre+'. Verifique su conexión.'); });
+}
+function infSectoresPermitidos(){
+  if(puedeVerResultados() || !SESSION) return null; // todos
+  return (SESSION.sectores && SESSION.sectores.length) ? SESSION.sectores : null;
+}
+function abrirInforme(){
+  if(!SESSION) return;
+  const res = puedeVerResultados(), permit = infSectoresPermitidos();
+  const secs = (permit || SECTORES.map(s=>s.n));
+  const campAct = (CAMPANIAS.find(c=>c.estado==='Activa')||CAMPANIAS[CAMPANIAS.length-1]||{}).id;
+  const campSel = res ? (FILT.campania || campAct) : campAct;
+  modal(`<h3>📤 Informe rápido ${res? 'de clima laboral' : 'de avance de encuestas'}</h3>
+  <p class="muted small" style="margin:6px 0 12px">${res? 'Resultados ordenados con gráficos y estadísticas, listos para tu jefatura o gerencia.' : 'Tu avance de encuestas aplicadas (sin resultados de clima), listo para tu jefatura.'}</p>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div><label>Campaña / encuesta</label><select id="infCamp" onchange="infPrevia()">${CAMPANIAS.map(c=>`<option value="${c.id}" ${c.id===campSel?'selected':''}>${pcEsc(c.nombre)}</option>`).join('')}</select></div>
+    <div><label>Alcance</label><select id="infSec" onchange="infPrevia()"><option value="">${permit? 'Mis sectores' : 'Todos los sectores'}</option>${secs.map(s=>`<option>${pcEsc(s)}</option>`).join('')}</select></div>
+  </div>
+  <label style="margin-top:12px">Vista previa del mensaje de WhatsApp (puedes editarlo)</label>
+  <textarea id="infTxt" rows="11" style="font-family:ui-monospace,Consolas,monospace;font-size:12px"></textarea>
+  <div class="flex mt16 wrap" style="justify-content:flex-end;gap:8px">
+    <button class="btn btn-o" onclick="closeModal()">Cerrar</button>
+    <button class="btn btn-o" onclick="infExcel()">📊 Excel con gráficos</button>
+    <button class="btn btn-o" onclick="infPDF(false)">📄 PDF con gráficos</button>
+    ${navigator.canShare ? `<button class="btn btn-o" onclick="infPDF(true)">📲 Compartir PDF</button>` : ''}
+    <button class="btn btn-p" style="background:linear-gradient(135deg,#16a34a,#15803d)" onclick="abrirWhatsApp('', $('infTxt').value)">🟢 Enviar por WhatsApp</button>
+  </div>
+  <div class="small muted mt8">💡 En el celular, «Compartir PDF» permite enviar el archivo directo a un chat de WhatsApp.</div>`);
+  infPrevia();
+}
+function infDatos(){
+  const campId = ($('infCamp')||{}).value || FILT.campania;
+  const sec = ($('infSec')||{}).value || '';
+  const permit = infSectoresPermitidos();
+  const camp = CAMPANIAS.find(c=>c.id===campId) || {nombre:campId};
+  const encs = DB.encuestas.filter(e=> e.campania===campId && (sec ? e.sector===sec : (!permit || permit.includes(e.sector))));
+  const secsAlc = sec ? [sec] : (permit || SECTORES.map(s=>s.n));
+  const hoy = fechaHoy(), lunes = pcLunes();
+  const res = puedeVerResultados();
+  const s = statsDe(encs);
+  const trab = secsAlc.reduce((a,n)=> a + ((SECTORES.find(x=>x.n===n)||{}).trabajadores||0), 0);
+  const porSector = secsAlc.map(n=>{ const es = encs.filter(e=>e.sector===n); const t = (SECTORES.find(x=>x.n===n)||{}).trabajadores||0; const st = statsDe(es);
+    return {n, enc:es.length, trab:t, part: t? Math.min(100, es.length/t*100) : 0, clima: st.clima, hoy: es.filter(e=>e.fecha===hoy).length}; });
+  const dims = DIMENSIONES.map(d=>({nombre:d.nombre, ico:d.ico, v:s.dims[d.k]||0})).filter(d=>d.v>0);
+  const jef = {}; encs.forEach(e=>{ const j = e.jefe||'—'; (jef[j] = jef[j] || []).push(e); });
+  const jefes = Object.keys(jef).map(j=>({j, n:jef[j].length, v:statsDe(jef[j]).clima, sector: jef[j][0].sector})).sort((a,b)=>b.v-a.v);
+  const cuenta = (arr, f) => arr.reduce((o,e)=>{ const k = f(e)||'—'; o[k]=(o[k]||0)+1; return o; }, {});
+  const dias = []; for(let i=6;i>=0;i--){ const d = new Date(); d.setDate(d.getDate()-i); const f = fechaHoy(d); dias.push({f, n: encs.filter(e=>e.fecha===f).length}); }
+  const semCat = {'Excelente':0,'Muy Bueno':0,'Bueno':0,'Regular':0,'Crítico':0}; encs.forEach(e=>{ semCat[semaforo(scoreEnc(e)).txt]++; });
+  return {res, camp, sec, secsAlc, encs, s, trab, part: trab? Math.min(100, encs.length/trab*100) : 0, porSector, dims, jefes,
+    porTipo: cuenta(encs, e=>e.tipo), porCanal: cuenta(encs, e=>e.canal||'Sin dato'), dias, semCat,
+    hoy: encs.filter(e=>e.fecha===hoy).length, semana: encs.filter(e=>e.fecha>=lunes).length,
+    alcance: sec || (infSectoresPermitidos()? 'Mis sectores ('+infSectoresPermitidos().join(', ')+')' : 'Todos los sectores'),
+    corte: new Date().toLocaleString('es-PE',{dateStyle:'short', timeStyle:'short'}), autor: (SESSION && SESSION.nombre) || ''};
+}
+function infTextoWA(D){
+  const L = [];
+  L.push(D.res ? '📊 *SIGCL · Informe de Clima Laboral*' : '📋 *SIGCL · Avance de encuestas*');
+  L.push('🚩 '+D.camp.nombre); L.push('🏭 '+D.alcance); L.push('🕒 Corte: '+D.corte); L.push('');
+  L.push('*Resumen*');
+  L.push('• Encuestas: *'+D.encs.length+'* (hoy: '+D.hoy+' · semana: '+D.semana+')');
+  L.push('• Participación: *'+pct(D.part)+'%* de '+D.trab+' trabajadores');
+  if(D.res && D.encs.length) L.push('• Clima general: *'+pct(D.s.clima)+'%* '+semEmoji(D.s.clima)+' '+semaforo(D.s.clima).txt);
+  if(D.res && D.dims.length){ L.push(''); L.push('*Dimensiones*'); D.dims.forEach(d=> L.push(d.ico+' '+d.nombre+': '+pct(d.v)+'% '+semEmoji(d.v))); }
+  const secs = D.porSector.filter(x=>x.enc>0);
+  if(secs.length){
+    L.push(''); L.push(D.res ? '*Sectores* (mayor → menor clima)' : '*Avance por sector*');
+    (D.res ? secs.slice().sort((a,b)=>b.clima-a.clima) : D.porSector.slice().sort((a,b)=>b.part-a.part)).forEach((x,i)=>
+      L.push((i+1)+'. '+x.n+' — '+(D.res? pct(x.clima)+'% '+semEmoji(x.clima)+' · ' : '')+x.enc+' enc. ('+pct(x.part)+'%)'));
+  }
+  if(D.res){
+    const crit = secs.filter(x=>x.clima<70);
+    if(crit.length){ L.push(''); L.push('⚠️ *Atención*: '+crit.map(x=>x.n+' ('+pct(x.clima)+'%)').join(', ')); }
+    const bajos = D.jefes.filter(j=>j.n>=3).slice(-3).reverse();
+    if(bajos.length){ L.push(''); L.push('*Jefaturas con menor índice* (n≥3)'); bajos.forEach(j=> L.push('• '+j.j+' ('+j.sector+'): '+pct(j.v)+'% '+semEmoji(j.v)+' · n='+j.n)); }
+  }
+  const canal = Object.keys(D.porCanal).map(k=>k+': '+D.porCanal[k]).join(' · ');
+  if(canal){ L.push(''); L.push('📱 Canal: '+canal); }
+  L.push(''); L.push('_Generado por SIGCL · Unifrutti Perú'+(D.autor? ' · '+D.autor : '')+'_');
+  return L.join('\n');
+}
+function infPrevia(){ const D = infDatos(); window.__infD = D; const t = $('infTxt'); if(t) t.value = infTextoWA(D); }
+
+/* gráficos del informe (fondo blanco, para PDF/Excel) */
+function infGraficos(D, formato){
+  const fondo = {id:'fondoBlanco', beforeDraw:c=>{ const x=c.ctx; x.save(); x.fillStyle='#ffffff'; x.fillRect(0,0,c.width,c.height); x.restore(); }};
+  const dl = window._dlReg ? {display:true, color:'#1c2536', font:{weight:'bold', size:11}, anchor:'end', align:'end', formatter:(v)=> v} : {display:false};
+  const hacer = (cfg, w, h) => {
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h; cv.style.cssText='position:fixed;left:-9999px;top:0';
+    document.body.appendChild(cv);
+    cfg.options = Object.assign({responsive:false, animation:false, devicePixelRatio:2, plugins:{}}, cfg.options||{});
+    cfg.options.plugins = Object.assign({legend:{display:false}, datalabels:dl}, cfg.options.plugins);
+    cfg.plugins = [fondo];
+    const bc = Chart.defaults.borderColor, cc = Chart.defaults.color; Chart.defaults.borderColor = '#e5e7eb'; Chart.defaults.color = '#374151';
+    let ch; try{ ch = new Chart(cv, cfg); } finally { Chart.defaults.borderColor = bc; Chart.defaults.color = cc; }
+    const img = formato==='jpeg' ? ch.toBase64Image('image/jpeg', 0.82) : ch.toBase64Image('image/png', 1); ch.destroy(); cv.remove(); return img;
+  };
+  const G = [];
+  const secs = D.porSector.filter(x=>x.enc>0);
+  if(D.res && D.encs.length){
+    if(D.dims.length) G.push({t:'Índice por dimensión (%)', img: hacer({type:'bar', data:{labels:D.dims.map(d=>d.nombre), datasets:[{data:D.dims.map(d=>pct(d.v)), backgroundColor:D.dims.map(d=>semHex(d.v)), borderRadius:6}]},
+      options:{indexAxis:'y', scales:{x:{min:0,max:100}}, plugins:{datalabels:Object.assign({}, dl, {formatter:v=>v+'%'})}}}, 900, 380)});
+    if(secs.length) G.push({t:'Clima laboral por sector (%)', img: hacer({type:'bar', data:{labels:secs.map(x=>x.n), datasets:[{data:secs.map(x=>pct(x.clima)), backgroundColor:secs.map(x=>semHex(x.clima)), borderRadius:6}]},
+      options:{scales:{y:{min:0,max:100}}, plugins:{datalabels:Object.assign({}, dl, {formatter:v=>v+'%'})}}}, 900, 400)});
+    const cats = Object.keys(D.semCat).filter(k=>D.semCat[k]);
+    if(cats.length) G.push({t:'Distribución de encuestas por semáforo', img: hacer({type:'doughnut', data:{labels:cats, datasets:[{data:cats.map(k=>D.semCat[k]),
+      backgroundColor:cats.map(k=>({'Excelente':'#16a34a','Muy Bueno':'#65a30d','Bueno':'#d97706','Regular':'#ea580c','Crítico':'#dc2626'})[k])}]},
+      options:{plugins:{legend:{display:true, position:'right'}, datalabels:Object.assign({}, dl, {color:'#fff', anchor:'center', align:'center', formatter:(v)=> v+' ('+Math.round(v/D.encs.length*100)+'%)'})}}}, 900, 380)});
+  }
+  G.push({t: D.res ? 'Participación por sector (%)' : 'Avance de encuestas por sector (% de trabajadores)', img: hacer({type:'bar', data:{labels:D.porSector.map(x=>x.n), datasets:[{data:D.porSector.map(x=>pct(x.part)), backgroundColor:'#2a78d6', borderRadius:6}]},
+    options:{scales:{y:{min:0,max:100}}, plugins:{datalabels:Object.assign({}, dl, {formatter:v=>v+'%'})}}}, 900, 400)});
+  G.push({t:'Encuestas de los últimos 7 días', img: hacer({type:'line', data:{labels:D.dias.map(d=>d.f.slice(8,10)+'/'+d.f.slice(5,7)), datasets:[{data:D.dias.map(d=>d.n), borderColor:'#e11d2e', backgroundColor:'rgba(225,29,46,.15)', fill:true, tension:.3}]},
+    options:{scales:{y:{beginAtZero:true, ticks:{precision:0}}}, plugins:{datalabels:Object.assign({}, dl, {align:'top'})}}}, 900, 320)});
+  const canales = Object.keys(D.porCanal);
+  if(canales.length) G.push({t:'Encuestas por canal', img: hacer({type:'doughnut', data:{labels:canales, datasets:[{data:canales.map(k=>D.porCanal[k]), backgroundColor:['#e11d2e','#2a78d6','#94a3b8','#16a34a']}]},
+    options:{plugins:{legend:{display:true, position:'right'}, datalabels:Object.assign({}, dl, {color:'#fff', anchor:'center', align:'center'})}}}, 900, 320)});
+  return G;
+}
+function infTablas(D){
+  const T = [];
+  T.push({t:'Resumen', cab:['Indicador','Valor'], filas:[['Campaña', D.camp.nombre],['Alcance', D.alcance],['Encuestas', D.encs.length],['Encuestas hoy', D.hoy],['Encuestas esta semana', D.semana],
+    ['Trabajadores en el alcance', D.trab],['Participación', pct(D.part)+'%']].concat(D.res && D.encs.length ? [['Clima general', pct(D.s.clima)+'% · '+semaforo(D.s.clima).txt]] : [])});
+  if(D.res && D.dims.length) T.push({t:'Dimensiones', cab:['Dimensión','Índice %','Semáforo'], filas:D.dims.map(d=>[d.nombre, pct(d.v), semaforo(d.v).txt]), col:1});
+  T.push({t: D.res ? 'Sectores' : 'Avance por sector', cab: D.res ? ['Sector','Encuestas','Trabajadores','Participación %','Clima %','Semáforo'] : ['Sector','Encuestas','Hoy','Trabajadores','Avance %'],
+    filas: D.porSector.map(x=> D.res ? [x.n, x.enc, x.trab, pct(x.part), x.enc? pct(x.clima) : '—', x.enc? semaforo(x.clima).txt : '—'] : [x.n, x.enc, x.hoy, x.trab, pct(x.part)]), col: D.res ? 4 : -1});
+  if(D.res && D.jefes.length) T.push({t:'Jefaturas evaluadas', cab:['Jefatura','Sector','Evaluaciones','Índice %','Semáforo'], filas:D.jefes.map(j=>[j.j, j.sector, j.n, pct(j.v), semaforo(j.v).txt]), col:3});
+  T.push({t:'Por tipo de trabajador', cab:['Tipo','Encuestas'], filas:Object.keys(D.porTipo).map(k=>[k, D.porTipo[k]])});
+  return T;
+}
+function infNombreArchivo(D, ext){ return 'SIGCL_'+(D.res?'Informe_Clima':'Avance_Encuestas')+'_'+String(D.camp.nombre).replace(/[^\wÁÉÍÓÚáéíóúñÑ-]+/g,'_')+(D.sec? '_'+D.sec.replace(/\s+/g,'_') : '')+'_'+fechaHoy()+'.'+ext; }
+function descargarBlob(blob, nombre){ const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nombre; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 800); }
+
+function infPDF(compartir){
+  const D = infDatos();
+  toast('📄 Generando PDF con gráficos…');
+  cargarLib('jspdf', ()=> !!(window.jspdf && window.jspdf.jsPDF))
+    .then(()=> cargarLib('autotable', ()=> !!(window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API && window.jspdf.jsPDF.API.autoTable)))
+    .then(()=>{
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({unit:'mm', format:'a4', compress:true});
+      const W = 210, M = 14; let y = 0;
+      const cab = ()=>{ doc.setFillColor(18,58,110); doc.rect(0,0,W,26,'F'); doc.setFillColor(225,29,46); doc.rect(0,26,W,1.6,'F');
+        doc.setTextColor(255,179,179); doc.setFontSize(8); doc.text('UNIFRUTTI PERÚ · GESTIÓN HUMANA · RELACIONES LABORALES', M, 8);
+        doc.setTextColor(255,255,255); doc.setFontSize(15); doc.setFont(undefined,'bold'); doc.text(D.res? 'Informe de Clima Laboral' : 'Informe de Avance de Encuestas', M, 16);
+        doc.setFont(undefined,'normal'); doc.setFontSize(8.5); doc.text(D.camp.nombre+'  ·  '+D.alcance, M, 22); doc.text('Corte: '+D.corte, W-M, 22, {align:'right'}); };
+      cab(); y = 34;
+      const kpis = [['ENCUESTAS', String(D.encs.length)], ['HOY', String(D.hoy)], ['PARTICIPACIÓN', pct(D.part)+'%']].concat(D.res && D.encs.length ? [['CLIMA GENERAL', pct(D.s.clima)+'%']] : [['SEMANA', String(D.semana)]]);
+      const kw = (W - 2*M - 3*4)/4;
+      kpis.forEach((k,i)=>{ const x = M + i*(kw+4); doc.setDrawColor(227,232,242); doc.setFillColor(248,250,253); doc.roundedRect(x, y, kw, 20, 2, 2, 'FD');
+        doc.setFontSize(7); doc.setTextColor(91,104,120); doc.text(k[0], x+kw/2, y+6, {align:'center'});
+        doc.setFontSize(15); doc.setFont(undefined,'bold'); const hx = (k[0]==='CLIMA GENERAL') ? semHex(D.s.clima) : '#123a6e';
+        doc.setTextColor(parseInt(hx.slice(1,3),16), parseInt(hx.slice(3,5),16), parseInt(hx.slice(5,7),16)); doc.text(k[1], x+kw/2, y+15, {align:'center'}); doc.setFont(undefined,'normal'); });
+      y += 27;
+      if(D.res && D.encs.length){ doc.setFontSize(9); doc.setTextColor(28,37,54);
+        const diag = 'Clima general '+pct(D.s.clima)+'% ('+semaforo(D.s.clima).txt+'). '+(D.dims.length? 'Mayor fortaleza: '+D.dims.slice().sort((a,b)=>b.v-a.v)[0].nombre+' ('+pct(D.dims.slice().sort((a,b)=>b.v-a.v)[0].v)+'%); principal oportunidad: '+D.dims.slice().sort((a,b)=>a.v-b.v)[0].nombre+' ('+pct(D.dims.slice().sort((a,b)=>a.v-b.v)[0].v)+'%).' : '');
+        doc.splitTextToSize(diag, W-2*M).forEach(l=>{ doc.text(l, M, y); y += 4.6; }); y += 2; }
+      const G = infGraficos(D, 'jpeg');
+      G.forEach(g=>{ const h = (W-2*M) * 0.42; if(y + h + 10 > 285){ doc.addPage(); cab(); y = 34; }
+        doc.setFontSize(10); doc.setFont(undefined,'bold'); doc.setTextColor(18,58,110); doc.text(g.t, M, y); doc.setFont(undefined,'normal'); y += 2;
+        doc.addImage(g.img, 'JPEG', M, y, W-2*M, h, undefined, 'FAST'); y += h + 7; });
+      infTablas(D).forEach(t=>{
+        if(y > 250){ doc.addPage(); cab(); y = 34; }
+        doc.setFontSize(10); doc.setFont(undefined,'bold'); doc.setTextColor(18,58,110); doc.text(t.t, M, y); doc.setFont(undefined,'normal');
+        doc.autoTable({startY: y+2, head:[t.cab], body:t.filas, margin:{left:M, right:M, top:32}, styles:{fontSize:8, cellPadding:1.8},
+          headStyles:{fillColor:[18,58,110], textColor:255, fontStyle:'bold'}, alternateRowStyles:{fillColor:[245,248,252]},
+          didParseCell: (h)=>{ if(h.section==='body' && t.col>=0 && h.column.index===t.col){ const v = parseFloat(h.cell.raw); if(!isNaN(v)){ const hx = semHex(v); h.cell.styles.textColor = [parseInt(hx.slice(1,3),16), parseInt(hx.slice(3,5),16), parseInt(hx.slice(5,7),16)]; h.cell.styles.fontStyle='bold'; } } },
+          didDrawPage: ()=>{ cab(); } });
+        y = doc.lastAutoTable.finalY + 8;
+      });
+      const n = doc.getNumberOfPages();
+      for(let i=1;i<=n;i++){ doc.setPage(i); doc.setFontSize(7.5); doc.setTextColor(120);
+        doc.text('SIGCL · Sistema Inteligente de Clima Laboral · generado por '+(D.autor||'—'), M, 292); doc.text('Página '+i+' de '+n, W-M, 292, {align:'right'}); }
+      const nombre = infNombreArchivo(D, 'pdf');
+      const blob = doc.output('blob');
+      auditar('Generó informe PDF','Informes', nombre); fbActividad('Generó informe PDF', D.alcance);
+      if(compartir){
+        const file = new File([blob], nombre, {type:'application/pdf'});
+        if(navigator.canShare && navigator.canShare({files:[file]})){
+          return navigator.share({files:[file], title:'Informe SIGCL', text: D.res? 'Informe de clima laboral · '+D.camp.nombre : 'Avance de encuestas · '+D.camp.nombre}).catch(()=>{});
+        }
+        toast('ℹ️ Este equipo no permite compartir archivos: se descargó el PDF para que lo adjuntes en WhatsApp.','warn');
+      }
+      descargarBlob(blob, nombre); toast('✅ PDF generado: '+nombre,'ok');
+    }).catch(e=> toast('⚠️ '+(e && e.message || 'No se pudo generar el PDF.'),'err'));
+}
+
+function infExcel(){
+  const D = infDatos();
+  toast('📊 Generando Excel con gráficos…');
+  cargarLib('exceljs', ()=> !!window.ExcelJS).then(()=>{
+    const wb = new ExcelJS.Workbook(); wb.creator = 'SIGCL · Unifrutti Perú'; wb.created = new Date();
+    const AZUL = 'FF123A6E', ROJO = 'FFE11D2E';
+    const r = wb.addWorksheet('Resumen', {views:[{showGridLines:false}]});
+    r.columns = [{width:34},{width:22},{width:18},{width:18},{width:18},{width:18}];
+    r.mergeCells('A1:F1'); r.getCell('A1').value = 'UNIFRUTTI PERÚ · GESTIÓN HUMANA · RELACIONES LABORALES';
+    r.getCell('A1').font = {bold:true, color:{argb:'FFFFB3B3'}, size:9}; r.getCell('A1').fill = {type:'pattern', pattern:'solid', fgColor:{argb:AZUL}};
+    r.mergeCells('A2:F2'); r.getCell('A2').value = D.res? 'Informe de Clima Laboral' : 'Informe de Avance de Encuestas';
+    r.getCell('A2').font = {bold:true, size:16, color:{argb:'FFFFFFFF'}}; r.getCell('A2').fill = {type:'pattern', pattern:'solid', fgColor:{argb:AZUL}};
+    r.mergeCells('A3:F3'); r.getCell('A3').value = D.camp.nombre+' · '+D.alcance+' · Corte: '+D.corte;
+    r.getCell('A3').font = {color:{argb:'FFFFFFFF'}, size:9}; r.getCell('A3').fill = {type:'pattern', pattern:'solid', fgColor:{argb:ROJO}};
+    r.getRow(2).height = 26;
+    let fila = 5;
+    infTablas(D)[0].filas.forEach(([k,v])=>{ r.getCell('A'+fila).value = k; r.getCell('A'+fila).font = {bold:true, color:{argb:'FF5B6878'}}; r.getCell('B'+fila).value = v; r.getCell('B'+fila).font = {bold:true, size:12}; fila++; });
+    fila += 1;
+    const G = infGraficos(D);
+    G.forEach(g=>{ r.getCell('A'+fila).value = g.t; r.getCell('A'+fila).font = {bold:true, color:{argb:AZUL}, size:12}; fila++;
+      const id = wb.addImage({base64:g.img, extension:'png'}); r.addImage(id, {tl:{col:0, row:fila-1}, ext:{width:760, height: g.t.indexOf('7 días')>=0 || g.t.indexOf('canal')>=0 ? 270 : 330}});
+      fila += (g.t.indexOf('7 días')>=0 || g.t.indexOf('canal')>=0) ? 15 : 18; });
+    infTablas(D).slice(1).forEach(t=>{
+      const ws = wb.addWorksheet(t.t.slice(0,31));
+      ws.addRow(t.cab); t.filas.forEach(f=> ws.addRow(f));
+      ws.getRow(1).eachCell(c=>{ c.font = {bold:true, color:{argb:'FFFFFFFF'}}; c.fill = {type:'pattern', pattern:'solid', fgColor:{argb:AZUL}}; c.alignment = {vertical:'middle'}; });
+      ws.columns.forEach((c,i)=>{ c.width = Math.max(12, ...[t.cab[i]].concat(t.filas.map(f=>f[i])).map(v=>String(v==null?'':v).length+2)); });
+      ws.autoFilter = {from:{row:1,column:1}, to:{row:1,column:t.cab.length}};
+      ws.views = [{state:'frozen', ySplit:1}];
+      if(t.col>=0) ws.eachRow((row,ri)=>{ if(ri===1) return; const c = row.getCell(t.col+1); const v = parseFloat(c.value); if(!isNaN(v)){ c.font = {bold:true, color:{argb:'FF'+semHex(v).slice(1).toUpperCase()}}; } });
+    });
+    /* detalle (con índices solo si puede ver resultados) */
+    const det = wb.addWorksheet('Detalle encuestas');
+    const cabD = ['Fecha','Hora','Sector','Área','Jefe evaluado','Tipo de trabajador','Canal','Registrado por'].concat(D.res? ['Índice %'].concat(DIMENSIONES.map(d=>d.nombre+' %')) : []);
+    det.addRow(cabD);
+    D.encs.slice().sort((a,b)=>(a.fecha+a.hora).localeCompare(b.fecha+b.hora)).forEach(e=> det.addRow([e.fecha, e.hora||'', e.sector, e.area||'', e.jefe||'', e.tipo||'', e.canal||'', e.usuario||'']
+      .concat(D.res? [pct(scoreEnc(e))].concat(DIMENSIONES.map(d=> pct(scoreDim([e], d.k)))) : [])));
+    det.getRow(1).eachCell(c=>{ c.font = {bold:true, color:{argb:'FFFFFFFF'}}; c.fill = {type:'pattern', pattern:'solid', fgColor:{argb:AZUL}}; });
+    det.columns.forEach(c=> c.width = 16); det.views = [{state:'frozen', ySplit:1}]; det.autoFilter = {from:{row:1,column:1}, to:{row:1,column:cabD.length}};
+    if(D.res){ const com = D.encs.filter(e=>e.comentario);
+      if(com.length){ const wc = wb.addWorksheet('Comentarios'); wc.addRow(['Fecha','Sector','Tema','Comentario']); com.forEach(e=> wc.addRow([e.fecha, e.sector, e.tema||'', e.comentario]));
+        wc.getRow(1).eachCell(c=>{ c.font = {bold:true, color:{argb:'FFFFFFFF'}}; c.fill = {type:'pattern', pattern:'solid', fgColor:{argb:AZUL}}; });
+        wc.columns = [{width:12},{width:18},{width:16},{width:90}]; } }
+    return wb.xlsx.writeBuffer().then(buf=>{
+      const nombre = infNombreArchivo(D, 'xlsx');
+      descargarBlob(new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}), nombre);
+      auditar('Generó informe Excel','Informes', nombre); fbActividad('Generó informe Excel', D.alcance);
+      toast('✅ Excel generado: '+nombre,'ok');
+    });
+  }).catch(e=> toast('⚠️ '+(e && e.message || 'No se pudo generar el Excel.'),'err'));
+}
+
+/* ---------------- F. CANALES DE SOPORTE (Panel de Control) ---------------- */
+function guardarSoporte(){
+  const w = waNum(($('spWa')||{}).value), c = (($('spMail')||{}).value||'').trim();
+  if(w && (w.length<9 || w.length>15)) return toast('⚠️ Escriba el WhatsApp con código de país, ej.: 51987654321','warn');
+  CONFIG_ACCESO.soporte = {whatsapp:w, correo:c};
+  guardarAcceso(); auditar('Actualizó canales de soporte','Panel de Control', (w||'sin WhatsApp')+' · '+(c||'sin correo'));
+  toast('✅ Canales de soporte guardados: aparecen en la bienvenida y en el asistente.','ok'); render();
 }
 
 </script>
